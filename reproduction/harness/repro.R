@@ -159,10 +159,15 @@ if (file.exists(slim)) {
     v <- t$paleoData_values; if (!is.matrix(v)) v <- matrix(as.numeric(v), ncol = 1)
     if (identical(dirs[i], "negative")) v <- v * -1
     u <- suppressWarnings(as.numeric(t$paleoData_temperature12kUncertainty %||% NA))
+    # also carry proxy + seasonality for GAM's per-proxy/per-season sigma lookup
+    proxy <- as.character(t$paleoData_proxy %||% t$paleoData_proxyGeneral %||% "")
+    season <- as.character(t$interpretation1_seasonalityGeneral %||% "")
     list(dataSetName = as.character(t$dataSetName),
          paleoData_values = v,
          ageEnsemble = as.matrix(t$ageEnsemble),
-         paleoData_uncertainty1sd = if (is.finite(u)) u else NULL)
+         paleoData_uncertainty1sd = if (is.finite(u)) u else NULL,
+         paleoData_proxy = proxy,
+         seasonalityGeneral = season)
   })
   saveRDS(list(fTS = fTS, lat = lat, lon = lon), slim)
   cat("[repro] wrote slim cache ->", slim, "  (size:", file.info(slim)$size %/% 1e6, "MB)\n")

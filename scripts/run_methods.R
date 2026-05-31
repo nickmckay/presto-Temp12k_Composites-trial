@@ -80,13 +80,14 @@ grid_cell_index <- function(lat, lon, grid) {
 # Returns the per-bin composite vector (length = #bins).
 # ---------------------------------------------------------------------------
 band_composite <- function(recs, binvec, binAges, stanFun, stanArgs,
-                            binFunArgs = list(), gridCells = NULL) {
+                            binFunArgs = list(), gridCells = NULL,
+                            ageVar = "age") {
   if (length(recs) == 0) return(rep(NA_real_, length(binAges)))
 
   binMat <- vapply(recs, function(ts) {
     out <- tryCatch(
       do.call(compositeR::sampleEnsembleThenBinTs,
-              c(list(ts = ts, binvec = binvec, ageVar = "age",
+              c(list(ts = ts, binvec = binvec, ageVar = ageVar,
                      spread = TRUE, alignInterpDirection = FALSE), binFunArgs)),
       error = function(e) rep(NA_real_, length(binAges)))
     if (length(out) != length(binAges)) rep(NA_real_, length(binAges)) else out
@@ -150,6 +151,7 @@ run_method <- function(method, fts, bandIdx, gridIdx, binvec, binAges, nens,
   degc_only <- method %in% c("scc", "dcc")
 
   # method-specific standardization + binning settings
+  ageVar <- "age"   # default: use the per-record median age vector
   if (method == "dcc") {
     # DCC.R: compositeEnsembles(..., duration=3000, searchRange=c(0,7000),
     #        normalizeVariance=FALSE) with default stan/bin funs.
@@ -162,6 +164,9 @@ run_method <- function(method, fts, bandIdx, gridIdx, binvec, binAges, nens,
     stanArgs <- list(interval = c(3000, 5000), normalizeVariance = FALSE)
     binFunArgs <- list(ar = 0)                      # white-noise proxy unc (paper SCC)
   } else if (method == "cps") {
+    # CPS: standardizeMeanIteratively (cps12k.R L77 with defaults), pre-built
+    # AR1 value-ensembles in paleoData_values are sampled one column per call
+    # by compositeR's NCOL>1 path. ageVar="age" matches the published default.
     stanFun <- compositeR::standardizeMeanIteratively
     stanArgs <- list(duration = cfg$cps_duration %||% 3000,
                      searchRange = c(0, 7000), normalizeVariance = TRUE)
@@ -178,7 +183,8 @@ run_method <- function(method, fts, bandIdx, gridIdx, binvec, binAges, nens,
       if (length(sel) < 2) next
       gcells <- if (method == "scc") gridIdx[sel] else NULL
       comp <- band_composite(fts[sel], binvec, binAges, stanFun, stanArgs,
-                             binFunArgs = binFunArgs, gridCells = gcells)
+                             binFunArgs = binFunArgs, gridCells = gcells,
+                             ageVar = ageVar)
       if (method == "cps" && !is.null(cps_targets)) {
         comp <- scale_to_target(comp, binvec, binAges, cps_targets[[b]], cfg)
       }
