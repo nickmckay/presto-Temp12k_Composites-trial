@@ -46,14 +46,19 @@
   if (nrow(pairs) < 2) return(NULL)
   np <- nrow(pairs)
   A <- matrix(0, np, nbins)
-  A[cbind(seq_len(np), pairs[, 1])] <- 1      # +f_i
-  A[cbind(seq_len(np), pairs[, 2])] <- -1     # -f_j
+  # MATLAB inferProxies.m L175-186 builds A with ±1/sqrt(2) per row. This is the
+  # load-bearing scaling: A^T A rows scale by 1/2 -> effective regularisation
+  # (regcov / A^T A scale) is balanced. ±1 instead would 50x over-regularise.
+  sq2i <- 1 / sqrt(2)
+  A[cbind(seq_len(np), pairs[, 1])] <-  sq2i
+  A[cbind(seq_len(np), pairs[, 2])] <- -sq2i
   list(A = A, cpos = Cpos[pairs], cneg = Cneg[pairs])
 }
 
 # ---- Newton-Raphson MLE (faithful port of optimize.m) -------------------------
 .paico_optimize <- function(A, cpos, cneg, regcov_scalar = 1,
-                            errorTolerance = 1e-8, maxIters = 1e4L) {
+                            errorTolerance = 1e-8, maxIters = 1e2L) {
+  # MATLAB PaiCoByLatEnsemble.m:174 sets options.maxIters = 100 (not 1e4).
   n <- ncol(A)
   regcov <- diag(n) / regcov_scalar           # paico.m: eye(n)/regcov
   eps <- .Machine$double.eps
@@ -91,8 +96,9 @@
     logl <- sum(cpos * log(cdf)) + sum(cneg * log(1 - cdf))
     if (is.finite(logl) && logl > bestlogl) {
       bestlogl <- logl; bestf <- f
+      v <- v / 10                                  # LM: relax damping on success
     } else {
-      v <- max(v * 10, 1e-2)                       # adaptive damping
+      v <- max(v * 10, 1e-2)                       # LM: tighten damping on failure
       f <- bestf; logl <- bestlogl; oldlogl <- logl * 1.1
       z <- as.numeric(A %*% f)
       cdf <- pnorm(z); cdf[cdf == 0] <- eps; cdf[cdf == 1] <- 1 - eps
@@ -103,13 +109,23 @@
 }
 
 # ---- calibrate (port of calibrate.m): mean-variance match to 2k target --------
+# MATLAB compares the std of `signal` AT the signal's bin centres against the
+# std of the target BINNED to the same bin width (data.instrumental.data is a
+# 100-yr binned mean of targetMedian.CPS, see PaiCoByLatEnsemble.m:146-150).
+# Using annual target values inflates `si` by the decadal/sub-decadal variance
+# the target carries -> mul = si/sp blown up -> amplitude inflated.
 .paico_calibrate <- function(signal, binAges, target_ages, target_vals,
                              overlap = c(0, 2000)) {
   ov_sig <- which(binAges >= overlap[1] & binAges <= overlap[2])
   if (length(ov_sig) < 3) return(signal)
   part <- signal[ov_sig]
-  ov_t <- which(target_ages >= overlap[1] & target_ages <= overlap[2])
-  instru <- target_vals[ov_t]
+  # Bin target_vals to the same time stride as `signal` so std reflects the
+  # binned (not annual) variance, matching MATLAB's data.instrumental.data.
+  bin_w <- if (length(binAges) >= 2) mean(diff(binAges)) else 100
+  instru <- vapply(binAges[ov_sig], function(t) {
+    mean(target_vals[target_ages >= t - bin_w / 2 & target_ages < t + bin_w / 2], na.rm = TRUE)
+  }, numeric(1))
+  instru <- instru[is.finite(instru)]
   sp <- stats::sd(part, na.rm = TRUE); si <- stats::sd(instru, na.rm = TRUE)
   if (!is.finite(sp) || sp == 0) return(signal)
   mul <- si / sp
@@ -121,12 +137,11 @@ run_paico <- function(fts, bandIdx, binvec, binAges, nens,
                       apply_reference, cfg = list()) {
   `%||%` <- function(a, b) if (is.null(a)) b else a
   N_BANDS <- length(band_weights)
-  regcov_scalar <- cfg$paico_reg_param %||% 1
+  # MATLAB PaiCoByLatEnsemble.m:176 passes regcov=100 -> options.regcov=eye(n)/100.
+  regcov_scalar <- cfg$paico_reg_param %||% 100
 
-  # PaiCo_12k.m bins at binWidth = 200 yr (far fewer pairwise comparisons than the
-  # 100-yr grid). Reconstruct on the 200-yr grid, then interpolate the calibrated
-  # band signal onto the shared output grid for the consensus.
-  pstep <- 200
+  # PaiCo_12k_ensemble.m line 28 sets binWidth = 100.
+  pstep <- 100
   pbinvec <- seq(min(binvec), max(binvec), by = pstep)
   pbinAges <- rowMeans(cbind(pbinvec[-1], pbinvec[-length(pbinvec)]))
 
@@ -150,17 +165,28 @@ run_paico <- function(fts, bandIdx, binvec, binAges, nens,
       f <- tryCatch(.paico_optimize(cc$A, cc$cpos, cc$cneg, regcov_scalar),
                     error = function(e) NULL)
       if (is.null(f)) next
-      sig <- rep(NA_real_, length(pbinAges))
-      present <- which(rowSums(is.finite(binMat)) > 0)   # bins (rows) with any data
-      sig[present] <- f[present]
+      # MATLAB returns f on the full target grid (no NA-hole-punching) so
+      # calibrate sees all bins in the overlap window.
+      sig <- f
       if (!is.null(cps_targets) && !is.null(cps_targets[[b]])) {
         tgt <- cps_targets[[b]]
-        # Calibrate to the target MEDIAN across members (targetMedian.CPS, the
-        # series PaiCo_12k.m actually used), not a random member.
-        tmed <- apply(tgt$mat, 1, median, na.rm = TRUE)
-        sig <- .paico_calibrate(sig, pbinAges, tgt$ages, tmed, overlap = c(0, 2000))
+        # Paper: "each 12k zonal composite was paired with, and scaled to, a
+        # different 2k zonal target randomly selected from the multi-method
+        # ensemble". MATLAB committed code uses fixed targetMedian.CPS, but the
+        # paper's behaviour requires per-member calibration variability. With
+        # only Neukom CPS available, draw a random column per PaiCo member to
+        # inject the calibration-uncertainty spread that the paper describes.
+        ncols <- NCOL(tgt$mat)
+        k <- ((i - 1L) %% ncols) + 1L   # deterministic rotation -> reproducible spread
+        tcol <- tgt$mat[, k]
+        # 1000-yr calibration window per the paper.
+        sig <- .paico_calibrate(sig, pbinAges, tgt$ages, tcol, overlap = c(0, 1000))
       }
-      # interpolate the 200-yr signal onto the shared output grid
+      # AFTER calibrate, mask bins where no proxy had data
+      present <- which(rowSums(is.finite(binMat)) > 0)
+      not_present <- setdiff(seq_along(sig), present)
+      if (length(not_present)) sig[not_present] <- NA_real_
+      # 100-yr signal already on the shared output grid; just copy where defined
       bandMat[, b] <- approx(pbinAges, sig, xout = binAges, rule = 2)$y
     }
     bandMat                                   # full (nbins x N_BANDS) per member
