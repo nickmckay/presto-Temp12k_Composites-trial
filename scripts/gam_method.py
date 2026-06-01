@@ -178,14 +178,15 @@ def load_records(ts_path, sigma_table, modern_grid, rng_seed=42):
         if str(r.get("seasonalityGeneral", "")).lower() not in ("annual", "summeronly", "winteronly"):
             continue
         age_med = np.asarray(r["age"], dtype=float)
-        # Prefer the values_ensemble (n_samples x n_cols) if present
-        ve = r.get("values_ensemble")
-        if ve is not None and len(ve) > 0:
-            val_mat = np.asarray(ve, dtype=float)            # (n_samples, n_cols)
-            base_val = np.nanmean(val_mat, axis=1)           # for sample filter
-        else:
-            base_val = np.asarray(r["values"], dtype=float)
-            val_mat = base_val.reshape(-1, 1)
+        # GAM-specific choice: use the single-vector measurement (r["values"])
+        # and let the per-cell pool-sampler add Gaussian sigma noise per draw
+        # (paper's GAM ensemble construction). The pre-baked value-ensemble in
+        # proxy_ts.json (N=10 AR1 realisations) is too few to give the per-cell
+        # GAM cloud the diversity it needs -- ten fixed realisations vs the
+        # published's 100-2500 columns from real LiPD ensembles. Per-draw fresh
+        # sigma noise reproduces the published behaviour with our 10-col input.
+        base_val = np.asarray(r["values"], dtype=float)
+        val_mat = base_val.reshape(-1, 1)
         if r.get("lat") is None or r.get("lon") is None:
             continue
         lat = float(r["lat"]); lon = float(r["lon"])
@@ -213,12 +214,10 @@ def load_records(ts_path, sigma_table, modern_grid, rng_seed=42):
         age_unc = 50.0 + np.maximum(age_med, 0.0) * (250.0 - 50.0) / 12000.0
         age_ens = rng.normal(loc=age_med[:, None], scale=age_unc[:, None],
                              size=(age_med.size, 500)).astype(np.float32)
-        # Per-proxy × season sigma (still used as fallback when value-ensemble
-        # is single-column: we add fresh AR1 noise via the val_mat column-sample
-        # plus this sigma. With multi-col ensemble, set sigma=0 so noise is
-        # only the pre-baked ensemble's variation.)
-        sigma_lookup = get_sigma(sigma_table, r.get("proxy"), r.get("seasonalityGeneral"))
-        sigma = sigma_lookup if val_mat.shape[1] == 1 else 0.0
+        # Per-proxy × season sigma -- applied every pool draw (matches paper's
+        # GAM behaviour and the published gam_ensemble.py default that gives
+        # local maxD ~0.22 / midHol 0.465 / spread 0.996).
+        sigma = get_sigma(sigma_table, r.get("proxy"), r.get("seasonalityGeneral"))
         # WorldClim modern lookup (fallback for records lacking 3-5 ka coverage)
         modern = modern_lookup(modern_grid, lat, lon)
         out.append({"age_med": age_med, "val": base_val, "val_mat": val_mat,
@@ -408,11 +407,18 @@ def aggregate(cell_draws, cell_band, nens, NB, ZW):
     return band_ens, glob
 
 
-def archival_reference(glob, bin_ages):
-    """Per-member subtract full-12k mean, then median=0 at 100 BP."""
+def archival_reference(glob, bin_ages, ref_start_ce=1800, ref_end_ce=1900):
+    """Per-member subtract full-12k mean, then anchor ensemble median to 0
+    over the paper's reference period (1800-1900 CE -> ~50-150 yr BP).
+    Matches the R methods' apply_reference (run_methods.R)."""
     glob = glob - np.nanmean(glob, axis=0, keepdims=True)
-    r100 = int(np.argmin(np.abs(bin_ages - 100)))
-    glob = glob - np.nanmedian(glob[r100, :])
+    ref_bp_lo = 1950 - ref_end_ce
+    ref_bp_hi = 1950 - ref_start_ce
+    refrows = np.where((bin_ages >= ref_bp_lo) & (bin_ages <= ref_bp_hi))[0]
+    if refrows.size == 0:
+        refrows = np.array([int(np.argmin(np.abs(bin_ages - 100)))])
+    per_member_ref = np.nanmean(glob[refrows, :], axis=0)
+    glob = glob - np.nanmedian(per_member_ref)
     return glob
 
 
