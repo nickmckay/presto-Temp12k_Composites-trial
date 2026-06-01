@@ -162,7 +162,13 @@ def load_records(ts_path, sigma_table, modern_grid, rng_seed=42):
     """Load proxy_ts.json, filter to annual|summerOnly|winterOnly + degC,
     compute per-record sigma + WorldClim modern + Gaussian-perturbed
     age ensemble (500 cols, age_unc = 50 + age*200/12000), decadally
-    decimate >1470-sample records (paper notebook cell 19)."""
+    decimate >1470-sample records (paper notebook cell 19).
+
+    Preserves the per-record value-ensemble (rebuilt by lipd_to_ts.py to
+    match the published pipeline's multi-col `paleoData_values` matrix).
+    Each ensemble member samples one column per call -- equivalent to
+    compositeR's NCOL>1 path.
+    """
     rng = np.random.default_rng(rng_seed)
     recs = json.loads(Path(ts_path).read_text())
     out = []
@@ -172,35 +178,50 @@ def load_records(ts_path, sigma_table, modern_grid, rng_seed=42):
         if str(r.get("seasonalityGeneral", "")).lower() not in ("annual", "summeronly", "winteronly"):
             continue
         age_med = np.asarray(r["age"], dtype=float)
-        val = np.asarray(r["values"], dtype=float)
+        # Prefer the values_ensemble (n_samples x n_cols) if present
+        ve = r.get("values_ensemble")
+        if ve is not None and len(ve) > 0:
+            val_mat = np.asarray(ve, dtype=float)            # (n_samples, n_cols)
+            base_val = np.nanmean(val_mat, axis=1)           # for sample filter
+        else:
+            base_val = np.asarray(r["values"], dtype=float)
+            val_mat = base_val.reshape(-1, 1)
         if r.get("lat") is None or r.get("lon") is None:
             continue
         lat = float(r["lat"]); lon = float(r["lon"])
-        # Paper cell 32: outlier zero, dropna
-        val = np.where(np.abs(val) > 200, np.nan, val)
-        m = np.isfinite(age_med) & np.isfinite(val) & (age_med >= -50) & (age_med <= 12050)
+        # Paper cell 32: outlier zero
+        val_mat = np.where(np.abs(val_mat) > 200, np.nan, val_mat)
+        base_val = np.where(np.abs(base_val) > 200, np.nan, base_val)
+        m = np.isfinite(age_med) & np.isfinite(base_val) & (age_med >= -50) & (age_med <= 12050)
         if m.sum() < 3:
             continue
-        age_med = age_med[m]; val = val[m]
+        age_med = age_med[m]; val_mat = val_mat[m]; base_val = base_val[m]
         # Direction flip (negative-direction proxies)
         if str(r.get("direction", "")).lower() == "negative":
-            val = val * -1.0
+            val_mat = val_mat * -1.0
+            base_val = base_val * -1.0
         # Paper cell 19: decadal averaging for records with >1470 samples
-        if val.size > 1470:
+        if base_val.size > 1470:
             keys = (5 + age_med - (age_med % 10)).astype(int)
             uniq = np.unique(keys)
-            new_val = np.array([np.nanmean(val[keys == k]) for k in uniq])
             new_age = np.array([np.nanmean(age_med[keys == k]) for k in uniq])
-            age_med, val = new_age, new_val
+            new_val_mat = np.array([np.nanmean(val_mat[keys == k, :], axis=0)
+                                     for k in uniq])
+            age_med, val_mat = new_age, new_val_mat
+            base_val = np.nanmean(val_mat, axis=1)
         # Paper cell 24+38: Gaussian-perturbed age ensemble, 500 columns
         age_unc = 50.0 + np.maximum(age_med, 0.0) * (250.0 - 50.0) / 12000.0
         age_ens = rng.normal(loc=age_med[:, None], scale=age_unc[:, None],
                              size=(age_med.size, 500)).astype(np.float32)
-        # Per-proxy × season sigma
-        sigma = get_sigma(sigma_table, r.get("proxy"), r.get("seasonalityGeneral"))
+        # Per-proxy × season sigma (still used as fallback when value-ensemble
+        # is single-column: we add fresh AR1 noise via the val_mat column-sample
+        # plus this sigma. With multi-col ensemble, set sigma=0 so noise is
+        # only the pre-baked ensemble's variation.)
+        sigma_lookup = get_sigma(sigma_table, r.get("proxy"), r.get("seasonalityGeneral"))
+        sigma = sigma_lookup if val_mat.shape[1] == 1 else 0.0
         # WorldClim modern lookup (fallback for records lacking 3-5 ka coverage)
         modern = modern_lookup(modern_grid, lat, lon)
-        out.append({"age_med": age_med, "val": val,
+        out.append({"age_med": age_med, "val": base_val, "val_mat": val_mat,
                     "lat": lat, "lon": lon,
                     "age_ens": age_ens, "sigma": float(sigma),
                     "modern": float(modern)})
@@ -306,20 +327,25 @@ def compute_alignments(recs, cell_idx):
 # ---------- pooled cloud + per-cell GAM ----------------------------------
 def build_pool_for_cell(records, n_pool, rng):
     """For each record in a cell, sample n_pool (age, value) pairs:
-       age = random column of age_ens; val = sample value + N(0, sigma).
-       Return concatenated arrays for the cell."""
+       age = random column of age_ens; val = random column of val_mat
+       (the pre-built value ensemble) minus the alignment offset, plus a
+       residual N(0, sigma) noise (zero when val_mat already has cols).
+       Concatenate into the cell's pooled cloud."""
     ages_list, vals_list, pre_list = [], [], []
     for r, offset, pre_an in records:
         if not np.isfinite(offset):
             continue
-        n_samp, n_cols = r["age_ens"].shape
+        n_samp, n_age_cols = r["age_ens"].shape
+        n_val_cols = r["val_mat"].shape[1]
         if n_samp == 0:
             continue
-        col_idx = rng.integers(0, n_cols, size=n_pool)
-        ages = r["age_ens"][:, col_idx]                  # (n_samp, n_pool)
-        # val_aligned = val - offset, replicated across pool draws, plus noise
-        v = (r["val"] - offset).astype(np.float64)
-        vals = v[:, None] + rng.normal(0.0, r["sigma"], size=(n_samp, n_pool))
+        age_col_idx = rng.integers(0, n_age_cols, size=n_pool)
+        val_col_idx = rng.integers(0, n_val_cols, size=n_pool)
+        ages = r["age_ens"][:, age_col_idx]              # (n_samp, n_pool)
+        vals = r["val_mat"][:, val_col_idx].astype(np.float64)
+        vals = vals - offset
+        if r["sigma"] > 0:
+            vals = vals + rng.normal(0.0, r["sigma"], size=(n_samp, n_pool))
         ages_list.append(ages.ravel())
         vals_list.append(vals.ravel())
         pre_list.append(np.full(ages.size, int(pre_an), dtype=np.int8))

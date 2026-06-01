@@ -62,6 +62,57 @@ def _num_list(x):
     return out
 
 
+# ---- value-ensemble Monte-Carlo (matches lipdFilesWithEnsembles structure) --
+# The published Kaufman 2020 pipeline ingests records whose paleoData_values is
+# a multi-column matrix of AR1-noise realisations pre-computed by
+# `createEnsembleLipdsForCompositing.R` (compositeR::simulateAutoCorrelatedUncertainty,
+# sd = paleoData_uncertainty1sd, ar = sqrt(0.5)). The lipdverse pickle has
+# collapsed these to single-vector measurements -- we regenerate the ensemble
+# here so CPS/SCC/GAM consumers see the same per-call noise structure that the
+# published reconstruction used.
+VALUE_ENSEMBLE_SIZE = 10           # cols per record (kept small to bound JSON size)
+VALUE_ENSEMBLE_AR = 0.5 ** 0.5     # AR1 coefficient (paper / compositeR default)
+
+
+def _ar1_noise(sd, n, ar, rng):
+    """Replicates compositeR::simulateAutoCorrelatedUncertainty exactly:
+       1. arima.sim AR(1) trajectory with ar=sqrt(0.5), innovation sd=1.
+       2. z-score to mean=0, std=1.
+       3. multiply by sd.
+    Result: AR1-correlated noise with EXACT std=sd (per realization)."""
+    import numpy as _np
+    n = int(n)
+    if not (_np.isfinite(sd) and sd > 0) or n <= 0:
+        return _np.zeros(n)
+    burnin = 100
+    z = rng.normal(0.0, 1.0, n + burnin)
+    y = _np.empty(n + burnin, dtype=float)
+    y[0] = 0.0
+    for t in range(1, n + burnin):
+        y[t] = ar * y[t - 1] + z[t]
+    y = y[burnin:]
+    s = float(_np.std(y))
+    if s == 0:
+        return _np.zeros(n)
+    return (y - float(_np.mean(y))) / s * sd
+
+
+def _build_value_ensemble(values, unc, rid):
+    """Return a (n_samples x VALUE_ENSEMBLE_SIZE) list-of-lists: each column is the
+    base value vector plus an independent AR1 noise realisation with sd=unc."""
+    import numpy as _np
+    base = _np.asarray([float("nan") if v is None else float(v) for v in values],
+                       dtype=float)
+    n = base.size
+    rng = _np.random.default_rng(seed=abs(hash(rid)) & 0xFFFFFFFF)
+    sd = float(unc) if unc is not None and _np.isfinite(unc) and unc > 0 else 0.0
+    ens = _np.empty((n, VALUE_ENSEMBLE_SIZE), dtype=float)
+    for k in range(VALUE_ENSEMBLE_SIZE):
+        ens[:, k] = base + _ar1_noise(sd, n, VALUE_ENSEMBLE_AR, rng)
+    # JSON-safe nested list, None for NaN (so jsonlite reads as NA on the R side)
+    return [[None if not _np.isfinite(x) else float(x) for x in row] for row in ens]
+
+
 def _safe_float(x):
     try:
         f = float(x)
@@ -251,13 +302,19 @@ def build(pkl_path: Path, out_json: Path, unc_path: Path = None,
         # which jsonlite parses back to NA in a numeric vector.
         age_j = [None if (v is None or not math.isfinite(v)) else v for v in age]
         values_j = [None if (v is None or not math.isfinite(v)) else v for v in values]
+        # Regenerate the value-ensemble that the published pipeline used (the
+        # pickle's paleoData_values are pre-collapsed single vectors; downstream
+        # methods sample one column per call -- see compositeR's NCOL>1 path).
+        values_ensemble = _build_value_ensemble(values_j, unc, rid)
 
         out.append({
             "id": rid,
             "dataSetName": str(rec.get("dataSetName", "") or ""),
             "variableName": str(rec.get("paleoData_variableName", "") or ""),
             "age": age_j,
-            "values": values_j,
+            "values": values_j,                      # the original single-realisation measurement
+            "values_ensemble": values_ensemble,      # (n_samples x VALUE_ENSEMBLE_SIZE) AR1 noise
+            "values_ensemble_n": VALUE_ENSEMBLE_SIZE,
             "lat": _safe_float(rec.get("geo_meanLat")),
             "lon": _safe_float(rec.get("geo_meanLon")),
             "elev": _safe_float(rec.get("geo_meanElev")),
