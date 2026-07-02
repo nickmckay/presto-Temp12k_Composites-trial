@@ -45,7 +45,12 @@ local({
 
 # ---- six 30-degree bands and their area weights (paper, Methods) ----
 LATBINS <- seq(-90, 90, by = 30)                 # 6 bands
-BAND_WEIGHTS <- c(0.067, 0.183, 0.25, 0.25, 0.183, 0.067)  # sum = 1.0
+# sin-latitude (equal-area) band weights, normalized to sum 1. Computed exactly
+# rather than hardcoded so R, GAM (gam_method.py), and the harness all agree to
+# machine precision; matches the published drivers (cps12k.R L96: sin(latbins)
+# differences; DCC.R; SCC). The former literal c(0.067,0.183,0.25,0.25,0.183,
+# 0.067) was these same values rounded to 3 dp (difference ~1e-5).
+BAND_WEIGHTS <- local({ w <- diff(sin(LATBINS * pi / 180)); w / sum(w) })
 N_BANDS <- length(BAND_WEIGHTS)
 
 # ---------------------------------------------------------------------------
@@ -371,7 +376,7 @@ main <- function() {
   method_cfg <- list(
     dcc_duration = cfg$advanced$dcc_duration,
     cps_duration = cfg$advanced$cps_duration,
-    cps_scale_window = cfg$advanced$cps_scale_window,
+    cps_scale_window = cfg$advanced$cps_scale_window,  # NOTE: not consumed — scale_to_target fixes the window to the published full 2k (0-2000 CE, cps12k.R:89)
     paico_reg_param = cfg$advanced$paico_reg_param,
     ncores = ncores,
     ref_start = refp$start, ref_end = refp$end)
