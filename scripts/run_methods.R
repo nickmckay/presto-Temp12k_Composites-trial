@@ -365,7 +365,11 @@ main <- function() {
   grid <- read.csv(file.path(refdir, "equal_area_grid_centers.csv"))
   gridIdx <- grid_cell_index(lat, lon, grid)
 
-  cps_targets <- load_cps_targets(file.path(refdir, "cps_targets"))
+  # EXPERIMENT: scale CPS to the Neukom 2k zonal targets (the paper's
+  # targetMedian.CPS, already used by PaiCo) instead of the PAGES2k files.
+  cps_targets <- load_neukom_targets(file.path(refdir, "neukom_targets"))
+  if (is.null(cps_targets) || all(vapply(cps_targets, is.null, logical(1))))
+    cps_targets <- load_cps_targets(file.path(refdir, "cps_targets"))
   # PaiCo scales to the Neukom 2k CPS reconstruction; fall back to PAGES2k if absent.
   paico_targets <- load_neukom_targets(file.path(refdir, "neukom_targets"))
   if (is.null(paico_targets) || all(vapply(paico_targets, is.null, logical(1))))
