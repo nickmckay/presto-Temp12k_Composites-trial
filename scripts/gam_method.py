@@ -361,7 +361,11 @@ def fit_cell(args):
     pygam call but constrains `lam` to remove the wiggly low-lam tail of the
     pygam 0.12 gridsearch."""
     from pygam import LinearGAM, s
-    cid, x, y, pre_anom, band, n_draws, bin_ages, binvec = args
+    cid, x, y, pre_anom, band, n_draws, bin_ages, binvec, seed = args
+    # pygam's gam.sample() draws via numpy's GLOBAL RNG (not a Generator), and
+    # fit_cell runs in forked pool workers, so without this the posterior draws
+    # differ every run. Seed the legacy global RNG deterministically per cell.
+    np.random.seed((int(seed) + int(cid) * 100003) % (2**32))
     if x.size < 20 or np.ptp(x) < 200:
         return cid, None, None, band
     ref_mask = (x >= 3000) & (x <= 5000)
@@ -478,7 +482,7 @@ def run_gam(ts_path, cfg, grid, sigma_table_path, modern_grid_path, out_csv):
         ok = np.isfinite(x) & np.isfinite(y) & (x >= -50) & (x <= 12050)
         if ok.sum() < 20:
             continue
-        groups.append((cid, x[ok], y[ok], p[ok], cell_band[cid], nens, bin_ages, binvec))
+        groups.append((cid, x[ok], y[ok], p[ok], cell_band[cid], nens, bin_ages, binvec, seed))
     print(f"[gam] fitting {len(groups)} cells on {cfg.get('ncores') or 'auto'} cores ...",
           file=sys.stderr, flush=True)
 
