@@ -70,12 +70,31 @@ Machine-local at `~/.claude/projects/-Users-nicholas-GitHub-presto-Temp12k-Compo
 Full plan: `~/.claude/plans/take-a-look-through-inherited-honey.md`. Everything actionable
 is also summarized in this file, so a fresh session can proceed from here alone.
 
-## IN FLIGHT (dispatched 2026-07-02 ~08:45 CDT) — collect these first
-Two nens=500 confirmation runs of the compositeR pin are RUNNING in CI (~1-2 h):
-- `baseline/fresh-nens500` — nens=500 control (unmodified main).
-- `exp/cr-pin-nens500` — nens=500 + compositeR@1e3e0f2e pin.
-When done: `bash reproduction/ci/score_branch.sh baseline/fresh-nens500` and
-`... exp/cr-pin-nens500`. Expect the pin to hold its CPS/DCC gains with the nens=100
-noise (±0.05) collapsed. If it holds and PaiCo doesn't regress → promote the pin
-(bake into Dockerfile; already staged on the cr-pin branches).
-Watch: `gh run list -R nickmckay/presto-Temp12k_Composites-trial --workflow=reconstruct.yml`
+## IN FLIGHT (dispatched 2026-07-02 ~13:38 UTC) — collect these first
+
+Two nens=500 confirmation runs dispatched; run IDs 28594449255 and 28594450895:
+- `baseline/fresh-nens500` (run 28594449255) — nens=500 control (unmodified main).
+- `exp/cr-pin-nens500` (run 28594450895) — nens=500 + compositeR@1e3e0f2e pin.
+
+Each takes ~1 h. Check status:
+```
+gh run list -R nickmckay/presto-Temp12k_Composites-trial --workflow=reconstruct.yml --limit=5
+```
+
+When BOTH show `completed / success`, score them:
+```
+bash reproduction/ci/score_branch.sh baseline/fresh-nens500
+bash reproduction/ci/score_branch.sh exp/cr-pin-nens500
+```
+
+Decision rule: if the pin holds its CPS/DCC gains and PaiCo doesn't regress,
+promote it — the Dockerfile change is already staged on `exp/cr-pin-1e3e0f2e`
+(search for `remotes::install_github` in `Dockerfile` on that branch).
+
+## Fresh-session relaunch instructions
+
+If the SSH session dropped and you need to restart Claude Code from scratch:
+1. Open Claude Code in `/Users/nicholas/GitHub/presto-Temp12k_Composites-trial`
+2. Say: "Read reproduction/ci/HANDOFF.md and continue the fidelity plan."
+   Claude Code will load memories automatically and resume from this file.
+3. First thing to do: run the status check above, then score if complete, or wait.
