@@ -42,9 +42,11 @@ the cloud). No local Docker/R/pandas required to drive it.
    unverifiable). Drop it.
 4. **CPS record-subset was a dead end** — template keeps 809 records vs harness 779
    (~30 apart), and the pickle has no `temp12kEnsemble` tag (uses `inCompilation="Temp12k"`).
-   The CPS gap is the **age-ensemble + value-ensemble** axes, not subset. The template
+   The CPS gap is the **age-ensemble + value-ensemble** axes, not subset. ~~The template
    propagates NO age uncertainty (`ageVar="age"` single vector; README's "BAM ±5%" claim
-   is false) — likely the real CPS/SCC lever.
+   is false)~~ **CORRECTED 2026-07-02: WRONG — compositeR's sampleEnsembleThenBinTs
+   auto-runs BAM (±5%) on single age vectors; age uncertainty IS propagated and
+   README is correct. See "Next steps" item 3 below.**
 5. **Noise floor ≈ ±0.05 at nens=100.** Small effects need nens=500 or replicates.
 
 ## DETERMINISM ACHIEVED (2026-07-02, branch `exp/seed-rng`) — merge candidate
@@ -75,10 +77,21 @@ pair at a second seed if the delta is small).
    to 4f96457, user-approved). Main now carries the seeded pipeline AND the
    verified seeded results; `results/validation/comparison.json` on main matches
    the canonical seeded baseline (stale CPS-0.656 headline replaced).
-2. compositeR pin: PARKED, but now cheaply re-testable — rebase
-   `exp/cr-pin-1e3e0f2e` onto seeded main; one run gives a paired delta.
-3. CPS/SCC: implement genuine age-uncertainty propagation (BAM fallback + real
-   ensembles when present) instead of the single median-age vector.
+2. compositeR pin paired re-test: IN FLIGHT on `exp/cr-pin-seeded` (main +
+   cherry-picked Dockerfile pin, run 28624661235). Any nonzero delta vs the
+   canonical seeded scores is caused by the pin.
+3. ~~CPS/SCC age-uncertainty propagation~~ **MOOT — AUDIT FINDING CORRECTED
+   2026-07-02.** The 2026-07-01 audit claimed the template propagates no age
+   uncertainty and the README "BAM ±5%" claim is false. WRONG: compositeR's
+   `sampleEnsembleThenBinTs` (both container f7268c4 AND publication 1e3e0f2e)
+   automatically runs `geoChronR::simulateBam` (bernoulli, param=0.05 = ±5%)
+   per member whenever `ts[[ageVar]]` is a single vector — which is what
+   build_fts passes. There is no inner tryCatch: had simulateBam errored, every
+   record would bin to NA and results would be empty; they aren't. So BAM age
+   uncertainty IS propagated per member per record, and README_NOTES.md is
+   CORRECT as written. The CPS gap (seeded maxD 0.375) must come from another
+   axis: value-ensemble regeneration quality (10-col AR1 from single vector vs
+   paper's real ensembles), CPS scaling target, or record subset.
 
 ## Branch map (all pushed to origin)
 - `overnight/fidelity-plan` — housekeeping commits (sin-lat weights, dead-knob docs),
@@ -90,6 +103,8 @@ pair at a second seed if the delta is small).
 - `baseline/fresh-nens500`, `exp/cr-pin-nens500` — nens=500 replicate pairs; PARKED.
 - `exp/seed-rng` — determinism fixes; VERIFIED byte-identical; MERGED to main
   2026-07-02 (fast-forward to 4f96457).
+- `exp/cr-pin-seeded` — seeded main + cherry-picked compositeR pin; paired
+  re-test run 28624661235 in flight 2026-07-02 ~22:0x UTC.
 
 ## Project memory (copy or re-read)
 Machine-local at `~/.claude/projects/-Users-nicholas-GitHub-presto-Temp12k-Composites-trial/memory/`
