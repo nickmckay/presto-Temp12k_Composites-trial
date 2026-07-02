@@ -159,9 +159,14 @@ def _is_temperature(rec: dict, interp: dict) -> bool:
 
 
 def _in_temp12k(rec: dict) -> bool:
+    # EXPERIMENT (exp/cps-t12kensemble): restrict to the published temp12kEnsemble
+    # QC subset (cps12k.R:25 / DCC.R use inCompilation=="temp12kensemble"), instead
+    # of the broad "temp12k" substring match. DIAGNOSTIC ONLY — this would filter out
+    # all non-Temp12k user data, so it must NOT ship as the default (see plan ground
+    # rule). Measures the record-set contribution to the CPS deglacial-damping gap.
     a = str(rec.get("paleoData_inCompilation", "") or "").lower()
     b = str(rec.get("paleoData_inCompilationBeta", "") or "").lower()
-    return "temp12k" in a or "temp12k" in b
+    return "temp12kensemble" in a or "temp12kensemble" in b
 
 
 def _proxy_type(rec: dict) -> str:
