@@ -27,7 +27,7 @@ bin:
 #      biasing the global composite warm by ~0.06 degC. n_draws=nens=100 matches
 #      the paper's "size flows through unchanged from cell -> band -> global"
 #      construction (no sub-sampling). Bump to 500 for full paper-faithful run.
-nens: 100
+nens: 500
 
 # ---- parallel workers. CI runs each method as its own 2-core matrix job, so 2
 #      matches the runner; bump for a bigger machine (auto-detects if removed). ----
