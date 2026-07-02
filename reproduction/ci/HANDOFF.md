@@ -77,9 +77,14 @@ pair at a second seed if the delta is small).
    to 4f96457, user-approved). Main now carries the seeded pipeline AND the
    verified seeded results; `results/validation/comparison.json` on main matches
    the canonical seeded baseline (stale CPS-0.656 headline replaced).
-2. compositeR pin paired re-test: IN FLIGHT on `exp/cr-pin-seeded` (main +
-   cherry-picked Dockerfile pin, run 28624661235). Any nonzero delta vs the
-   canonical seeded scores is caused by the pin.
+2. compositeR pin paired re-test: **DONE — PIN REJECTED (2026-07-02 ~22:35 UTC,
+   run 28624661235 on `exp/cr-pin-seeded`).** Paired deltas vs canonical seeded
+   baseline: SCC +0.024, DCC exactly 0, GAM exactly 0, CPS +0.075, PaiCo +0.044
+   (positive = worse). The publication-era compositeR (1e3e0f2e) REGRESSES
+   CPS/PaiCo/SCC vs the container's f7268c4; DCC's code path is identical
+   between versions and GAM is the no-compositeR control (both exactly 0,
+   which also confirms determinism holds across a different Docker build).
+   The pin line is CLOSED. (Single-seed caveat: deltas are exact at seed 42.)
 3. ~~CPS/SCC age-uncertainty propagation~~ **MOOT — AUDIT FINDING CORRECTED
    2026-07-02.** The 2026-07-01 audit claimed the template propagates no age
    uncertainty and the README "BAM ±5%" claim is false. WRONG: compositeR's
