@@ -145,7 +145,9 @@ band_composite <- function(recs, binvec, binAges, stanFun, stanArgs,
     cnts <- rowsum(t(fin) * 1.0, group = cg)
     cellMat <- t(sums / cnts)            # nbins x ncells; NaN where a cell empty
     cellMat[!is.finite(cellMat)] <- NA
-    comp <- rowMeans(cellMat, na.rm = TRUE)
+    # SCC only (gridded path): published SCC_GMST/gridMat aggregates cells with the
+    # cross-cell MEDIAN (Matrix.calMedian), not the mean. DCC/CPS use the else branch.
+    comp <- apply(cellMat, 1, median, na.rm = TRUE)
   } else {
     comp <- rowMeans(compMat, na.rm = TRUE)
   }
