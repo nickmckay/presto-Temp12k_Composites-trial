@@ -181,7 +181,10 @@ apply_reference <- function(ens, binAges, ref_start_ce = 1800, ref_end_ce = 1900
 # ---------------------------------------------------------------------------
 run_method <- function(method, fts, bandIdx, gridIdx, binvec, binAges, nens,
                        cps_targets = NULL, cfg = list()) {
-  degc_only <- method %in% c("scc", "dcc")
+  # EXPERIMENT: published cps12k.R composites degC records only (see
+  # reproduction/harness/repro.R degc_methods = dcc, scc, cps); the template
+  # was including ~30 non-degC records in CPS (the 809-vs-779 subset gap).
+  degc_only <- method %in% c("scc", "dcc", "cps")
 
   # method-specific standardization + binning settings
   ageVar <- "age"   # default: use the per-record median age vector
