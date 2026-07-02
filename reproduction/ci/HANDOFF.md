@@ -69,3 +69,13 @@ Machine-local at `~/.claude/projects/-Users-nicholas-GitHub-presto-Temp12k-Compo
 (`temp12k-fidelity-plan`, `-fidelity-status`, `-ground-truth-local`, `-dev-environment`).
 Full plan: `~/.claude/plans/take-a-look-through-inherited-honey.md`. Everything actionable
 is also summarized in this file, so a fresh session can proceed from here alone.
+
+## IN FLIGHT (dispatched 2026-07-02 ~08:45 CDT) — collect these first
+Two nens=500 confirmation runs of the compositeR pin are RUNNING in CI (~1-2 h):
+- `baseline/fresh-nens500` — nens=500 control (unmodified main).
+- `exp/cr-pin-nens500` — nens=500 + compositeR@1e3e0f2e pin.
+When done: `bash reproduction/ci/score_branch.sh baseline/fresh-nens500` and
+`... exp/cr-pin-nens500`. Expect the pin to hold its CPS/DCC gains with the nens=100
+noise (±0.05) collapsed. If it holds and PaiCo doesn't regress → promote the pin
+(bake into Dockerfile; already staged on the cr-pin branches).
+Watch: `gh run list -R nickmckay/presto-Temp12k_Composites-trial --workflow=reconstruct.yml`
