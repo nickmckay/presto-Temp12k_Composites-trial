@@ -17,3 +17,4 @@ for m in scc dcc gam cps paico; do
   fi
 done
 [ "$got" = "0" ] && echo "no results/methods on origin/$b yet (CI not finished?)"
+exit 0

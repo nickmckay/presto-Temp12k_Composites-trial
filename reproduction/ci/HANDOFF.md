@@ -70,25 +70,34 @@ Machine-local at `~/.claude/projects/-Users-nicholas-GitHub-presto-Temp12k-Compo
 Full plan: `~/.claude/plans/take-a-look-through-inherited-honey.md`. Everything actionable
 is also summarized in this file, so a fresh session can proceed from here alone.
 
-## IN FLIGHT (dispatched 2026-07-02 ~13:38 UTC) — collect these first
+## nens=500 rep1 results (runs 28594449255 / 28594450895, completed 2026-07-02 ~15:10 UTC)
 
-Two nens=500 confirmation runs dispatched; run IDs 28594449255 and 28594450895:
-- `baseline/fresh-nens500` (run 28594449255) — nens=500 control (unmodified main).
-- `exp/cr-pin-nens500` (run 28594450895) — nens=500 + compositeR@1e3e0f2e pin.
+maxD vs published (lower better):
+| method | baseline/fresh-nens500 | exp/cr-pin-nens500 | delta (pin) |
+|---|---|---|---|
+| SCC | 0.116 | 0.162 | +0.046 |
+| DCC | 0.186 | 0.166 | -0.020 |
+| GAM | 0.154 | 0.156 | +0.002 |
+| CPS | 0.312 | 0.277 | -0.035 |
+| PaiCo | 0.116 | 0.159 | +0.043 |
 
-Each takes ~1 h. Check status:
-```
-gh run list -R nickmckay/presto-Temp12k_Composites-trial --workflow=reconstruct.yml --limit=5
-```
+**MIXED.** Decision rule not met on rep1: PaiCo (and SCC) regressed ~+0.045; CPS/DCC
+gains held direction but attenuated vs nens=100. SCC flipped sign vs nens=100 (was a
+win, now a loss), so these deltas may still be noise. CPS is the only consistent
+signal across nens=100 and nens=500 (pin always improves it).
 
-When BOTH show `completed / success`, score them:
-```
-bash reproduction/ci/score_branch.sh baseline/fresh-nens500
-bash reproduction/ci/score_branch.sh exp/cr-pin-nens500
-```
+## IN FLIGHT (dispatched 2026-07-02 ~15:14 UTC) — replicate pair to pin the
+## nens=500 noise floor. Runs 28600938435 (baseline) / 28600940099 (cr-pin).
 
-Decision rule: if the pin holds its CPS/DCC gains and PaiCo doesn't regress,
-promote it — the Dockerfile change is already staged on `exp/cr-pin-1e3e0f2e`
+Same branches re-dispatched (rep2). Rep1 CSVs remain in each branch's git history
+(combine commits results per run). When both complete, score again and compare
+rep2-vs-rep1 within each branch → empirical nens=500 noise floor. Then judge the
+pin deltas above against that floor.
+
+Decision rule (updated): promote the pin only if its CPS gain exceeds the empirical
+noise floor AND the SCC/PaiCo regressions do NOT (i.e. they're noise). If SCC/PaiCo
+regressions are real, do not promote globally; consider a CPS-only pin instead.
+Dockerfile change already staged on `exp/cr-pin-1e3e0f2e`
 (search for `remotes::install_github` in `Dockerfile` on that branch).
 
 ## Fresh-session relaunch instructions
