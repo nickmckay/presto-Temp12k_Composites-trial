@@ -70,7 +70,7 @@ def _num_list(x):
 # collapsed these to single-vector measurements -- we regenerate the ensemble
 # here so CPS/SCC/GAM consumers see the same per-call noise structure that the
 # published reconstruction used.
-VALUE_ENSEMBLE_SIZE = 10           # cols per record (kept small to bound JSON size)
+VALUE_ENSEMBLE_SIZE = 100          # EXPERIMENT: 10 -> 100 (test value-ensemble quality; JSON ~10x)
 VALUE_ENSEMBLE_AR = 0.5 ** 0.5     # AR1 coefficient (paper / compositeR default)
 
 
