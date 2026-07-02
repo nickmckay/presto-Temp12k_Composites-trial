@@ -47,15 +47,35 @@ the cloud). No local Docker/R/pandas required to drive it.
    is false) — likely the real CPS/SCC lever.
 5. **Noise floor ≈ ±0.05 at nens=100.** Small effects need nens=500 or replicates.
 
-## Next steps (priority) — revised 2026-07-02 after noise-floor measurement
-1. **Pin the RNG seed in the container/methods** so A/B comparisons become paired
-   (deterministic like GAM already is). Without this, no experiment on SCC/DCC/CPS/
-   PaiCo can be judged from single runs. (DONE deciding; needs implementation.)
-2. Regenerate the stale baseline `comparison.json` — but from replicate MEANS (or a
-   seeded run), not a single run; single-run CPS wobbles ~0.1.
-3. compositeR pin: PARKED (indistinguishable from baseline at nens=500 x2 reps).
-   Re-test after seed pinning if desired; staged Dockerfile change remains on
-   `exp/cr-pin-1e3e0f2e`.
+## DETERMINISM ACHIEVED (2026-07-02, branch `exp/seed-rng`) — merge candidate
+
+Back-to-back CI runs 28619537951 / 28621091018 on `exp/seed-rng` produced
+byte-identical results/ (all five method CSVs, reconstruction, comparison.json;
+run 6's auto-commit had nothing to commit). Three fixes, all on that branch:
+1. `scripts/run_methods.R` + `scripts/paico.R`: per-member, per-method
+   `set.seed` from `advanced.seed` (default 42) — R methods had NO seeding.
+2. `scripts/lipd_to_ts.py`: value-ensemble RNG was seeded with builtin
+   `hash(rid)`, which is SALTED PER PROCESS (PYTHONHASHSEED) — every previous
+   run fed different value ensembles to ALL methods. Now `zlib.crc32(rid)`.
+   This was the dominant noise source.
+3. `scripts/gam_method.py`: pygam's `gam.sample()` uses numpy's legacy GLOBAL
+   RNG in forked workers, unseeded — now seeded per cell.
+
+**Canonical seeded scores (seed=42, nens=100, main + fixes), maxD vs published:**
+| SCC | DCC | GAM | CPS | PaiCo |
+|---|---|---|---|---|
+| 0.126 | 0.074 | 0.172 | 0.375 | 0.129 |
+
+All future A/B comparisons against these are exact paired deltas (any nonzero
+delta is caused by the change; judge whether it generalizes by re-running the
+pair at a second seed if the delta is small).
+
+## Next steps (priority) — revised 2026-07-02 evening
+1. **Merge `exp/seed-rng` to main** (recommended; awaiting user go-ahead).
+2. Regenerate the stale `comparison.json` headline baseline from a seeded run
+   (the canonical numbers above ARE that baseline once merged).
+3. compositeR pin: PARKED, but now cheaply re-testable — rebase
+   `exp/cr-pin-1e3e0f2e` onto seeded main; one run gives a paired delta.
 4. CPS/SCC: implement genuine age-uncertainty propagation (BAM fallback + real
    ensembles when present) instead of the single median-age vector.
 
@@ -64,8 +84,10 @@ the cloud). No local Docker/R/pandas required to drive it.
   audit refresh, `reproduction/audit/overnight_2026-07-01.md` write-up, these ci helpers.
 - `exp/cps-t12kensemble` — FAILED (temp12kEnsemble tag absent); dead end.
 - `exp/scc-median` — SCC rowMeans→median; not a win.
-- `exp/cr-pin-1e3e0f2e` — compositeR publication pin; the promising one.
+- `exp/cr-pin-1e3e0f2e` — compositeR publication pin; PARKED (noise).
 - `baseline/fresh` — no-op off main; the fresh control baseline.
+- `baseline/fresh-nens500`, `exp/cr-pin-nens500` — nens=500 replicate pairs; PARKED.
+- `exp/seed-rng` — determinism fixes; VERIFIED byte-identical; MERGE CANDIDATE.
 Nothing merged to `main`.
 
 ## Project memory (copy or re-read)
