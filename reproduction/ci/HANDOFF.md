@@ -71,12 +71,13 @@ delta is caused by the change; judge whether it generalizes by re-running the
 pair at a second seed if the delta is small).
 
 ## Next steps (priority) — revised 2026-07-02 evening
-1. **Merge `exp/seed-rng` to main** (recommended; awaiting user go-ahead).
-2. Regenerate the stale `comparison.json` headline baseline from a seeded run
-   (the canonical numbers above ARE that baseline once merged).
-3. compositeR pin: PARKED, but now cheaply re-testable — rebase
+1. ~~Merge `exp/seed-rng` to main~~ **DONE 2026-07-02 ~21:40 UTC** (fast-forward
+   to 4f96457, user-approved). Main now carries the seeded pipeline AND the
+   verified seeded results; `results/validation/comparison.json` on main matches
+   the canonical seeded baseline (stale CPS-0.656 headline replaced).
+2. compositeR pin: PARKED, but now cheaply re-testable — rebase
    `exp/cr-pin-1e3e0f2e` onto seeded main; one run gives a paired delta.
-4. CPS/SCC: implement genuine age-uncertainty propagation (BAM fallback + real
+3. CPS/SCC: implement genuine age-uncertainty propagation (BAM fallback + real
    ensembles when present) instead of the single median-age vector.
 
 ## Branch map (all pushed to origin)
@@ -87,8 +88,8 @@ pair at a second seed if the delta is small).
 - `exp/cr-pin-1e3e0f2e` — compositeR publication pin; PARKED (noise).
 - `baseline/fresh` — no-op off main; the fresh control baseline.
 - `baseline/fresh-nens500`, `exp/cr-pin-nens500` — nens=500 replicate pairs; PARKED.
-- `exp/seed-rng` — determinism fixes; VERIFIED byte-identical; MERGE CANDIDATE.
-Nothing merged to `main`.
+- `exp/seed-rng` — determinism fixes; VERIFIED byte-identical; MERGED to main
+  2026-07-02 (fast-forward to 4f96457).
 
 ## Project memory (copy or re-read)
 Machine-local at `~/.claude/projects/-Users-nicholas-GitHub-presto-Temp12k-Composites-trial/memory/`
