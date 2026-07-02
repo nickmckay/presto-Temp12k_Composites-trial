@@ -146,6 +146,9 @@ run_paico <- function(fts, bandIdx, binvec, binAges, nens,
   pbinAges <- rowMeans(cbind(pbinvec[-1], pbinvec[-length(pbinvec)]))
 
   one_member <- function(i) {
+    # per-member RNG stream (offset 4e6 keeps it distinct from dcc/scc/cps
+    # streams in run_methods.R); deterministic across core counts/scheduling
+    if (!is.null(cfg$seed)) set.seed(cfg$seed + 4000000L + i)
     bandMat <- matrix(NA_real_, nrow = length(binAges), ncol = N_BANDS)
     for (b in seq_len(N_BANDS)) {
       sel <- which(bandIdx == b)                       # PaiCo uses all records

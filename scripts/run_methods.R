@@ -208,7 +208,13 @@ run_method <- function(method, fts, bandIdx, gridIdx, binvec, binAges, nens,
     stop(paste("run_method: unknown method", method))
   }
 
+  # per-member, per-method RNG stream: deterministic regardless of core count
+  # or mclapply scheduling, so identical configs give identical output (paired
+  # A/B comparisons; gam_method.py is already seeded the same way)
+  moff <- match(method, c("dcc", "scc", "cps"))
+
   one_member <- function(i) {
+    if (!is.null(cfg$seed)) set.seed(cfg$seed + moff * 1000000L + i)
     bandMat <- matrix(NA_real_, nrow = length(binAges), ncol = N_BANDS)
     for (b in seq_len(N_BANDS)) {
       sel <- which(bandIdx == b)
@@ -374,6 +380,7 @@ main <- function() {
     cps_scale_window = cfg$advanced$cps_scale_window,
     paico_reg_param = cfg$advanced$paico_reg_param,
     ncores = ncores,
+    seed = as.integer(cfg$advanced$seed %||% 42),  # same default as gam_method.py
     ref_start = refp$start, ref_end = refp$end)
 
   # write <m>_global.csv (binAges + ens) and <m>_bands.csv (binAges, band, ens)
