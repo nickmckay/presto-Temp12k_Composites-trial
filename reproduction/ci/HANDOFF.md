@@ -47,13 +47,17 @@ the cloud). No local Docker/R/pandas required to drive it.
    is false) — likely the real CPS/SCC lever.
 5. **Noise floor ≈ ±0.05 at nens=100.** Small effects need nens=500 or replicates.
 
-## Next steps (priority)
-1. Regenerate the stale baseline (one fresh `main` run → update `comparison.json`).
-2. nens=500 confirmation of the compositeR pin (`exp/cr-pin-1e3e0f2e`); if it holds and
-   PaiCo doesn't regress, promote it (bake `remotes::install_github(...,ref="1e3e0f2e")`
-   into the Dockerfile — already staged on that branch).
-3. CPS/SCC: implement genuine age-uncertainty propagation (BAM fallback + real ensembles
-   when present) instead of the single median-age vector.
+## Next steps (priority) — revised 2026-07-02 after noise-floor measurement
+1. **Pin the RNG seed in the container/methods** so A/B comparisons become paired
+   (deterministic like GAM already is). Without this, no experiment on SCC/DCC/CPS/
+   PaiCo can be judged from single runs. (DONE deciding; needs implementation.)
+2. Regenerate the stale baseline `comparison.json` — but from replicate MEANS (or a
+   seeded run), not a single run; single-run CPS wobbles ~0.1.
+3. compositeR pin: PARKED (indistinguishable from baseline at nens=500 x2 reps).
+   Re-test after seed pinning if desired; staged Dockerfile change remains on
+   `exp/cr-pin-1e3e0f2e`.
+4. CPS/SCC: implement genuine age-uncertainty propagation (BAM fallback + real
+   ensembles when present) instead of the single median-age vector.
 
 ## Branch map (all pushed to origin)
 - `overnight/fidelity-plan` — housekeeping commits (sin-lat weights, dead-knob docs),
@@ -86,19 +90,36 @@ gains held direction but attenuated vs nens=100. SCC flipped sign vs nens=100 (w
 win, now a loss), so these deltas may still be noise. CPS is the only consistent
 signal across nens=100 and nens=500 (pin always improves it).
 
-## IN FLIGHT (dispatched 2026-07-02 ~15:14 UTC) — replicate pair to pin the
-## nens=500 noise floor. Runs 28600938435 (baseline) / 28600940099 (cr-pin).
+## nens=500 rep2 results (runs 28600938435 / 28600940099, completed 2026-07-02 ~16:45 UTC)
 
-Same branches re-dispatched (rep2). Rep1 CSVs remain in each branch's git history
-(combine commits results per run). When both complete, score again and compare
-rep2-vs-rep1 within each branch → empirical nens=500 noise floor. Then judge the
-pin deltas above against that floor.
+maxD, rep1 / rep2 (rep1 CSVs in branch git history):
+| method | baseline rep1 | baseline rep2 | pin rep1 | pin rep2 | mean delta (pin) |
+|---|---|---|---|---|---|
+| SCC | 0.116 | 0.139 | 0.162 | 0.115 | +0.011 |
+| DCC | 0.186 | 0.144 | 0.166 | 0.167 | +0.002 |
+| GAM | 0.154 | 0.155 | 0.156 | 0.155 | +0.001 |
+| CPS | 0.312 | 0.375 | 0.277 | 0.376 | -0.017 |
+| PaiCo | 0.116 | 0.158 | 0.159 | 0.166 | +0.026 |
 
-Decision rule (updated): promote the pin only if its CPS gain exceeds the empirical
-noise floor AND the SCC/PaiCo regressions do NOT (i.e. they're noise). If SCC/PaiCo
-regressions are real, do not promote globally; consider a CPS-only pin instead.
-Dockerfile change already staged on `exp/cr-pin-1e3e0f2e`
-(search for `remotes::install_github` in `Dockerfile` on that branch).
+### VERDICT: DO NOT PROMOTE the compositeR pin.
+
+**Empirical nens=500 noise floor (replicate-to-replicate |diff| within a branch):**
+CPS ~0.06-0.10, SCC/DCC/PaiCo ~0.04-0.05, GAM ~0.001 (deterministic).
+nens=500 does NOT collapse the noise floor — run-to-run stochasticity is
+structural (not tamed by ensemble size). Every pin delta, including the CPS
+"win", is well inside the replicate noise. The pin is indistinguishable from
+baseline. This also retroactively discredits the nens=100 single-run deltas
+(CPS -0.15, DCC -0.08): with CPS wobbling ~0.1 between identical nens=500
+runs, single-run comparisons cannot resolve effects of that size.
+
+**Methodological consequence for the whole loop:** single-run A/B comparisons
+on this pipeline are unreliable for all methods except GAM. Future experiments
+need either (a) a pinned RNG seed in the container so comparisons are paired,
+or (b) >=3 replicates per arm, comparing means. Option (a) is the cheap fix
+and the recommended next infrastructure change.
+
+`exp/cr-pin-1e3e0f2e` / `exp/cr-pin-nens500`: PARKED (not disproven, but
+unresolvable at current noise). The staged Dockerfile pin stays on the branch.
 
 ## Fresh-session relaunch instructions
 
