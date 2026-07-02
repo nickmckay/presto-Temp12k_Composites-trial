@@ -29,6 +29,14 @@ RUN python3 -m venv /opt/venv && \
 
 ENV PYTHON_BIN=/opt/venv/bin/python
 
+# ── EXPERIMENT (exp/cr-pin-1e3e0f2e): pin compositeR to the publication-era
+# commit 1e3e0f2e (Kaufman et al. 2020) over the base image's newer build, to
+# test task 6 (does the exact published algorithm improve CPS/SCC fidelity?).
+# Build risk: 1e3e0f2e (Feb 2020) may need older geoChronR/lipdR APIs than the
+# base image ships; if the R install fails, this run fails (main is untouched).
+RUN R -e 'if (!requireNamespace("remotes", quietly=TRUE)) install.packages("remotes", repos="https://cloud.r-project.org"); remotes::install_github("nickmckay/compositeR", ref="1e3e0f2e", upgrade="never")' \
+    && R -e 'cat("compositeR:", as.character(packageVersion("compositeR")), "\n")'
+
 # ── Layer 3: app source (cheap; iterates often) ───────────────────────────
 WORKDIR /app
 COPY scripts/        /app/scripts/
