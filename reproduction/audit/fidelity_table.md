@@ -46,10 +46,33 @@ Column meanings:
 - **DCC** — spread 0.998 (target 1.00, was 0.97 BAM). Real chronology ensembles fix spread perfectly.
 - **SCC** — spread 1.052 (target 1.00, was 0.79 BAM/real-ens). 12 ka −0.79 vs published −0.77 (perfect). Bold-text columns are the targets we matched. Switched to the published uncertainty model (±5% age + σ=1.5 white temp); spread now matches.
 
+## NATIVE-R re-run (2026-07-01) — RELATIVE ONLY, compositeR `refactor` 99a738e
+
+Docker is unavailable on this machine, so these were run in native R 4.4.0 with
+compositeR installed from `~/GitHub/compositeR` @ **99a738e (`refactor` branch)** —
+NOT the container's f7268c4. Absolute numbers are therefore NOT comparable to the
+container rows above; use only for the deltas noted.
+
+| method | maxD | bias | amp | midHol (m\|p) | 12ka (m\|p) | spread | notes |
+|--------|------|------|-----|----------------|-------------|--------|-------|
+| DCC | 0.130 | −0.061 | 1.025 | 0.44 \| 0.50 | −0.86 \| −0.77 | 0.98 | nens=50 + `PRESTO_CHRON_REPAIR` (11→3 dropped) |
+| CPS | 0.747 | +0.248 | 0.901 | 1.29 \| 1.09 | −2.74 \| −3.36 | 0.91 | same slim-cache data as container harness (0.32) |
+
+**Key finding — compositeR version dominates CPS.** The CPS run used byte-identical
+data to the container harness (fts_dcc.rds, temp12kEnsemble subset, real value-ens),
+so 0.32 (f7268c4) → 0.747 (refactor 99a738e) isolates the compositeR version: the
+`refactor` branch is **~0.43 maxD WORSE for CPS**. It reverts CPS to template-like
+behaviour (midHol 1.29, 12ka −2.74). DCC is nearly immune (normalizeVariance=FALSE);
+CPS z-scores (normalizeVariance=TRUE) and is very sensitive to the standardize refactor.
+⇒ Do NOT adopt the refactor branch; the pin experiment is f7268c4 vs 1e3e0f2e only.
+DCC's template +0.105 warm bias flips to −0.061 cold in the harness → the warm bias is
+a data-path/survivor-selection artifact, not intrinsic to DCC.
+
 **Remaining residuals (all methods) explained by:**
 - nens=50 vs published 500 (sampling noise dominates maxΔ at nens=50)
-- compositeR version drift (container f7268c4 ~2022 vs publication-era 1e3e0f2e Feb 2020;
-  `bin.R`/`spreadPaleoData` refactored). Pinning compositeR@1e3e0f2e would close this.
+- compositeR version drift — MEASURED at ~0.43 maxD for CPS between f7268c4 and the
+  `refactor` branch (see native re-run above); publication-era is 1e3e0f2e (Feb 2020).
+  `bin.R`/`spreadPaleoData`/standardize refactored. Pin experiment: f7268c4 vs 1e3e0f2e.
 - lipdR/geoChronR drift (newer `extractTs` returns `paleoData_values` as matrix; 11 records
   dropped due to `NROW(values)!=NROW(ageEnsemble)`).
 - Random seeds — the original didn't publish them; not recoverable.
