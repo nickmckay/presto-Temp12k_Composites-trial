@@ -124,6 +124,23 @@ untouched methods scored EXACTLY baseline (perfect controls):
   VALUE_ENSEMBLE_SIZE=1 (or dropping regeneration so compositeR simulates
   per-member AR1 noise from paleoData_uncertainty1sd) as a cheap follow-up.
 
+## Follow-up: exp/no-vens (run 28629630608, 2026-07-03 ~00:37 UTC) — REJECTED
+
+Dropped regenerated ensembles entirely (compositeR simulates fresh per-member
+AR noise from uncertainty1sd, restoring per-method ar: SCC 0, DCC/CPS sqrt(.5)).
+Paired deltas: SCC +0.045, DCC +0.014, GAM exactly 0 (control), CPS +0.089,
+PaiCo +0.061. WORSE across the board.
+
+**Value-noise dose-response is now bracketed and non-monotonic:**
+fresh-per-member (max diversity) CPS +0.089 | 10 pre-baked cols = 0.375 BEST |
+100 pre-baked cols CPS +0.172. Reusing 10 noise realizations across 100
+members effectively averages down the injected variance; both more noise
+diversity AND the published per-method noise structure score worse. The
+untested limit is ZERO added value noise (emit 2 identical base columns so
+compositeR's NCOL>1 path always draws the clean vector) — would tell whether
+value noise helps at all, though spread (0.86 SCC) would drop further.
+VALUE_ENSEMBLE_SIZE=10 stays. The CPS 0.375 baseline stands.
+
 ## Branch map (all pushed to origin)
 - `overnight/fidelity-plan` — housekeeping commits (sin-lat weights, dead-knob docs),
   audit refresh, `reproduction/audit/overnight_2026-07-01.md` write-up, these ci helpers.
