@@ -23,8 +23,8 @@ pygam 0.12 venv; MATLAB R2023a.
 
 | method | tag | orig driver | fresh-orig vs committed | noise floor | template stack | status |
 |---|---|---|---|---|---|---|
-| DCC | temp12kEnsemble | DCC.R (R, cR@1e3e0f2e) | **maxD 0.031** | **0.029** | pending | orig ✓✓ within noise |
-| CPS | temp12kEnsemble | cps12k.R (R, cR@1e3e0f2e) | **maxD 0.074-0.078** | **0.109** | pending | orig ✓✓ within noise |
+| DCC | temp12kEnsemble | DCC.R (R, cR@1e3e0f2e) | **maxD 0.031** | **0.029** | **maxD 0.035** | ✓✓ template reproduces |
+| CPS | temp12kEnsemble | cps12k.R (R, cR@1e3e0f2e) | **maxD 0.074-0.078** | **0.109** | running | orig ✓✓ within noise |
 | SCC | Temp12k | SCC_GMST_122719.m (MATLAB) | BLOCKED (license -8) | — | pending | blocked |
 | PaiCo | temp12kEnsemble | PaiCo_12k_ensemble.m (MATLAB) | (MATLAB) | — | pending | pending |
 | GAM | Temp12k | GAM_frozen (Python) | pending | pending | pending | pending |
@@ -36,6 +36,18 @@ pygam 0.12 venv; MATLAB R2023a.
   match (1.22 vs 1.21). Within noise.
 Both confirm the full chain (lpd load, chron-repair, compositeR@1e3e0f2e) on
 the 779-record v1.0.0 ensemble set reproduces Kaufman 2020.
+
+### Step 3: SHIPPING TEMPLATE on real ensembles (the deliverable)
+The template (`scripts/run_methods.R`, f7268c4 compositeR) REIMPLEMENTS the
+published `compositeEnsembles` engine via `sampleEnsembleThenBinTs` +
+`standardizeMeanIteratively`. Fed the same real value+age ensembles
+(`age_var=ageEnsemble`), does the reimplementation reproduce the publication?
+- **DCC template**: maxD **0.035** vs NOAA published, **0.037** vs the
+  original-driver reference (noise floor 0.029). Band width 0.397 vs published
+  0.403; amp 1.02, spread 1.06. Essentially at the floor. **Reproduced.**
+  For contrast, the old synthetic-pickle template scored DCC 0.074 — real
+  ensembles ~halved the gap and matched the band.
+- **CPS template**: running.
 
 ### DCC (first result)
 Fresh run of the verbatim published `DCC.R` (only environmental patches: bin
