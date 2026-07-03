@@ -173,6 +173,31 @@ prepare-data fetch the 698 publication lpd files and attach their real
 ensembles (ageEnsemble matrices; compositeR's NCOL>1 path consumes them
 natively). Large change; park unless per-method fidelity matters enough.
 
+## GAM/CPS diagnostic round 1 (runs 2863155xxxx, 2026-07-03 ~01:30 UTC)
+
+Paired deltas vs canonical baseline; untouched methods exactly baseline in
+every run (controls clean):
+- `exp/gam-lam0` (lam floor 0.1→1): GAM maxD 0.172→**0.165** (−0.007), amp
+  unchanged (1.136), spread 0.978. **First WIN of the campaign** (small,
+  exact). amp overshoot is lam-insensitive in this range. Dose step 2
+  (floor→10, `exp/gam-lam10`) dispatched.
+- `exp/gam-ng05` (noise_gain 1.0→0.5): GAM maxD 0.153 (−0.019) BUT spread
+  collapses 0.977→0.489. noise_gain is the spread knob, already calibrated;
+  REJECTED as a maxD lever (trade-off, not a win). Keep 1.0.
+- `exp/cps-norescale` (rescale=FALSE): CPS **bit-identical to baseline** —
+  a perfect no-op. Mechanism understood: apply_reference subtracts member
+  means and re-anchors at 100 BP, so any mean-shift from rescale cancels.
+  IMPORTANT: CPS's +0.2 warm offset is therefore a SHAPE error (late-Holocene
+  decline into the anchor too shallow), NOT a level error. Mean-matching
+  hypotheses are untestable/irrelevant under referencing.
+- `exp/cps-scalewin1k` (scale window 0-1000 BP): CPS 1.076 — REJECTED
+  decisively; full-2k window stays (knob re-deadened; consider removing it
+  from config docs instead).
+
+Round 2 IN FLIGHT: `exp/gam-lam10` (run 28636484065), `exp/scc-flatsigma`
+(run 28636484989; published flat sigma=1.5 for all SCC records, targets
+SCC under-dispersion spread 0.864).
+
 ## Branch map (all pushed to origin)
 - `overnight/fidelity-plan` — housekeeping commits (sin-lat weights, dead-knob docs),
   audit refresh, `reproduction/audit/overnight_2026-07-01.md` write-up, these ci helpers.
