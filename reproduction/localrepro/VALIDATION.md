@@ -36,6 +36,34 @@ residuals remain, each understood and scoped:
   running the original GAM_frozen (gam_ensemble.py + its netCDF grids) as the
   true reference; deferred (heavy, and GAM is Python->Python, not a port).
 
+## Phase-5 containerization (in progress)
+
+Decisions (user): BUNDLE a slim real-ensemble artifact into the image; target
+v1.0.0 FIRST (reproduce in-container), then switch to v1.0.2.
+
+**JSON real-ensemble path CLOSED + validated.** Production runs through
+proxy_ts.json, not the RDS shortcut used above. Wired: build_fts reads
+`age_ensemble` (list-of-rows -> matrix), run_methods.R main() auto-sets
+age_var="ageEnsemble". End-to-end test: run_methods.R main() on a real-ensemble
+proxy_ts.json for DCC -> **maxD 0.053** (vs 0.035 via RDS; the +0.018 is the
+100-col ensemble subsampling). Log confirms "age path: ageEnsemble". The
+production data path reproduces the publication.
+
+**Artifact size:** 100-col ensembles = ~120 MB (xz-rds) / ~155 MB (gz-json) for
+the shared temp12kEnsemble set (DCC/CPS/PaiCo). Single-vector set (SCC/GAM) is
+tiny. Acceptable as a bundled image layer. Fewer cols shrink it at a small maxD
+cost (100 cols already costs +0.018 vs full).
+
+**Remaining containerization steps:**
+1. Bundle: one subsampled ensemble artifact (temp12kEnsemble ~821 recs) +
+   one single-vector proxy_ts.json (Temp12k ~774 recs); COPY into image.
+2. entrypoint: PRESTO_REALENS mode emits proxy_ts.json from the bundled
+   artifact (in-container R) instead of lipd_to_ts.py(pickle); method picks the
+   ensemble vs single-vector set by its tag.
+3. Dockerfile: COPY the bundle + emit script.
+4. CI/build: build image, run per-method, verify byte-determinism + scores
+   match this ledger. (Needs Docker.)
+
 Phase-1 core thesis PROVEN: the real-ensemble data path reproduces the
 publication for the ensemble methods, and the MATLAB→R SCC port is faithful.
 PaiCo + GAM have scoped follow-ups. Next: Phase-5 containerization.
