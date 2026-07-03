@@ -202,8 +202,12 @@ run_method <- function(method, fts, bandIdx, gridIdx, binvec, binAges, nens,
                        cps_targets = NULL, cfg = list()) {
   degc_only <- method %in% c("scc", "dcc")
 
-  # method-specific standardization + binning settings
-  ageVar <- "age"   # default: use the per-record median age vector
+  # method-specific standardization + binning settings.
+  # ageVar: "age" (default, per-record median vector -> BAM ages simulated in
+  # sampleEnsembleThenBinTs) or "ageEnsemble" when records carry a real age
+  # ensemble matrix (compositeR's NCOL>1 path draws a real chronology per
+  # member). Set via cfg$age_var for the real-ensemble path (Phase-1 localrepro).
+  ageVar <- cfg$age_var %||% "age"
   if (method == "dcc") {
     # DCC.R: compositeEnsembles(..., duration=3000, searchRange=c(0,7000),
     #        normalizeVariance=FALSE) with default stan/bin funs.
