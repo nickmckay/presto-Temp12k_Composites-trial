@@ -295,7 +295,10 @@ scale_to_target <- function(comp, binvec, binAges, target, cfg) {
     scaleCompositeLocal(composite = comp, binvec = binvec,
                         scaleYears = 1950 - target$ages, scaleData = target$mat,
                         scaleWindow = 1950 - c(0, 2000),
-                        rescale = TRUE, scaleVariance = TRUE),
+                        # EXPERIMENT: variance-only scaling; CPS shows a uniform
+                        # +0.2-0.3 warm offset vs the 100BP anchor, implicating
+                        # the mean-matching (rescale) step, not the variance.
+                        rescale = FALSE, scaleVariance = TRUE),
     error = function(e) { message("scale_to_target error: ", conditionMessage(e)); comp })
   out
 }
