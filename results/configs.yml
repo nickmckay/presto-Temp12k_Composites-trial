@@ -5,6 +5,8 @@ presto_config:
     value: '[0, 1000]'
   advanced.dcc_duration:
     value: '3000'
+  advanced.gam_noise_gain:
+    value: '0.5'
   advanced.gam_spline_k:
     value: '25'
   advanced.paico_reg_param:
