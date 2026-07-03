@@ -72,9 +72,19 @@ build_fts <- function(recs) {
       vals <- matrix(as.numeric(r$values), ncol = 1)
     }
     if (identical(tolower(r$direction), "negative")) vals <- vals * -1
+    # Real age ensemble (proxy_ts real-ensemble schema): jsonlite gives a list
+    # of row vectors -> rbind to a matrix. compositeR's NCOL>1 path then draws
+    # a real chronology per member (ageVar="ageEnsemble"). Absent => single
+    # median age vector + BAM (legacy pickle path).
+    ae <- r$age_ensemble
+    ageEns <- NULL
+    if (!is.null(ae) && length(ae) > 0) {
+      ageEns <- if (is.list(ae)) do.call(rbind, lapply(ae, as.numeric)) else as.matrix(ae)
+    }
     list(
       dataSetName = r$dataSetName,
       age = as.numeric(r$age),
+      ageEnsemble = ageEns,
       paleoData_values = vals,
       paleoData_uncertainty1sd = if (is.null(r$uncertainty1sd)) NA_real_ else as.numeric(r$uncertainty1sd),
       lat = as.numeric(r$lat),
@@ -386,6 +396,15 @@ main <- function() {
   lon <- vapply(fts, function(x) x$lon, numeric(1))
   bandIdx <- band_index(lat)
 
+  # Auto-detect the real-ensemble path: if records carry a real age ensemble
+  # matrix (proxy_ts real-ensemble schema), draw real chronologies per member
+  # (ageVar="ageEnsemble") instead of BAM-simulating from a single median age.
+  has_age_ens <- any(vapply(fts, function(x) !is.null(x$ageEnsemble) &&
+                              NCOL(x$ageEnsemble) > 1, logical(1)))
+  age_var_eff <- cfg$advanced$age_var %||% (if (has_age_ens) "ageEnsemble" else "age")
+  cat(sprintf("[run_methods] age path: %s (%s real age ensembles)\n",
+              age_var_eff, if (has_age_ens) "records carry" else "no"))
+
   grid <- read.csv(file.path(refdir, "equal_area_grid_centers.csv"))
   gridIdx <- grid_cell_index(lat, lon, grid)
 
@@ -403,6 +422,7 @@ main <- function() {
     cps_duration = cfg$advanced$cps_duration,
     cps_scale_window = cfg$advanced$cps_scale_window,
     paico_reg_param = cfg$advanced$paico_reg_param,
+    age_var = age_var_eff,                          # "ageEnsemble" when real ensembles present
     ncores = ncores,
     seed = as.integer(cfg$advanced$seed %||% 42),  # same default as gam_method.py
     # per-member centering window in yr BP; NULL/absent = full-record mean
