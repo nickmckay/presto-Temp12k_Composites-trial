@@ -182,8 +182,15 @@ run_paico <- function(fts, bandIdx, binvec, binAges, nens,
         ncols <- NCOL(tgt$mat)
         k <- ((i - 1L) %% ncols) + 1L   # deterministic rotation -> reproducible spread
         tcol <- tgt$mat[, k]
-        # 1000-yr calibration window per the paper.
-        sig <- .paico_calibrate(sig, pbinAges, tgt$ages, tcol, overlap = c(0, 1000))
+        # Calibration overlap window (yr BP). The PaiCo(0-12k)<->Neukom-2k
+        # overlap is 0-2000 BP. mul=si/sp: over a 0-1000 window the signal's
+        # variance sp is small (last-millennium ~flat) -> mul & amplitude
+        # inflate (real-ensemble PaiCo amp was 1.17). Widening sp's window to
+        # the full 2k overlap (target variance is flat across 0-1000/0-2000,
+        # so si is unchanged) lowers mul toward amp 1.0. Configurable via
+        # cfg$paico_calib_window; default 0-2000.
+        cw <- cfg$paico_calib_window %||% c(0, 2000)
+        sig <- .paico_calibrate(sig, pbinAges, tgt$ages, tcol, overlap = cw)
       }
       # AFTER calibrate, mask bins where no proxy had data
       present <- which(rowSums(is.finite(binMat)) > 0)

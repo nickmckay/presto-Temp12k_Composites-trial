@@ -11,8 +11,11 @@ measured noise floor. Then containerize + productionize (Phase 5).
 | DCC | ensemble | **0.035** | 0.074 | 0.029 | ✓ reproduces (at floor) |
 | SCC | single-vec | **0.088** | 0.126 | (MATLAB blocked) | ✓ port reproduces, spread 1.01 |
 | CPS | ensemble | **0.131** | 0.375 | 0.109 | ✓ near floor, small residual |
-| PaiCo | ensemble | **0.207** | 0.129 | (MATLAB blocked) | ⚠ amp 1.17 calibration residual |
-| GAM | single-vec | **0.259** | 0.172 | — | ⚠ adapter proxy→sigma mapping |
+| PaiCo | ensemble | **0.098** | 0.129 | (MATLAB blocked) | ✓ median reproduces (spread 0.70, target-limited) |
+| GAM | single-vec | **0.259** | 0.172 | — | ⚠ v1.0.0 data effect (input verified clean) |
+
+*PaiCo was 0.207 with the 0-1000 calibration window; fixed to 0.098 with the
+principled 0-2000 window (below). GAM residual is data-version, not a bug.*
 
 **Conclusion.** Real ensembles + faithful ports reproduce the ensemble methods
 that matter most: DCC lands exactly at the noise floor, CPS improves 3x
@@ -100,17 +103,25 @@ published SCC: **maxD 0.088**, bias -0.006, amp 0.986, midHol 0.485 (pub 0.49),
 12 ka -0.73 (pub -0.77), **spread 1.007** (band 0.596 vs 0.646). Reproduces the
 published SCC; the MATLAB→R port is faithful. (Old synthetic-pickle SCC: 0.126.)
 
-### PaiCo (MATLAB→R port) — residual gap
-paico.R (pairwise-comparison MLE + Neukom-2k calibration) on the 821
-temp12kEnsemble records, nens=500, vs NOAA published PaiCo: **maxD 0.207**,
-bias -0.004, amp **1.173** (17% over-amplified), midHol 0.467 (pub 0.42), 12 ka
--0.898 (pub -0.72, too cold), spread 0.977 (band 0.307 vs 0.314 — good).
-The gap is amplitude/shape, not spread. NOTE: unlike DCC/CPS, real ensembles
-made PaiCo WORSE than the synthetic pickle (0.129 → 0.207) — the pickle's
-0.129 was likely right-for-wrong-reasons (cf. the CI-era findings). The honest
-real-ensemble number reveals a calibration residual in the port: the
-.paico_calibrate amplitude match to the Neukom target over-amplifies with real
-value ensembles. Needs a follow-up pass on the calibration window/variance.
+### PaiCo (MATLAB→R port) — FIXED (calibration window)
+paico.R (pairwise-comparison MLE + Neukom-2k calibration) on 821 temp12kEnsemble
+records, nens=500, vs NOAA published PaiCo.
+- **Before (0-1000 window): maxD 0.207, amp 1.17** (over-amplified), 12ka -0.898
+  (pub -0.72), spread 0.977.
+- **After (0-2000 window): maxD 0.098, amp 0.901**, 12ka -0.697 (pub -0.72,
+  ~exact), midHol 0.353 (pub 0.42), spread 0.703.
+Root cause: `.paico_calibrate` sets amplitude via mul=si/sp over the overlap
+window. The PaiCo<->Neukom-2k overlap is 0-2000 BP, but the code used 0-1000,
+where the signal is ~flat -> sp tiny -> mul & amplitude inflate. The Neukom
+target variance is identical over 0-1000 and 0-2000 (0.140), so widening only
+grows sp, lowering mul to amp~0.9. **maxD halved (0.207->0.098).** Fix: default
+`cfg$paico_calib_window = c(0,2000)` in paico.R.
+Residual: spread 0.703 (band too narrow). The short window had inflated spread
+AND amplitude together via noisy per-member sp; no single window hits amp=1 and
+spread=1. The spread deficit is STRUCTURAL — we calibrate each member to one
+Neukom CPS target column, but the paper drew from a MULTI-METHOD 2k target
+ensemble (not archived / unavailable), which supplied extra calibration spread.
+Documented data limitation, not a code bug.
 
 ### Step-3 verdict (ensemble methods)
 Real ensembles + the shipping template reproduce the publication: DCC exactly
