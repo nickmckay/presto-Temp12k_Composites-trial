@@ -206,8 +206,9 @@ run_paico <- function(fts, bandIdx, binvec, binAges, nens,
   cols <- lapply(cols, function(m)
     if (is.matrix(m) && all(dim(m) == c(nb, N_BANDS))) m else matrix(NA_real_, nb, N_BANDS))
   rs <- cfg$ref_start %||% 1800; re <- cfg$ref_end %||% 1900
-  globalEns <- apply_reference(vapply(cols, area_weight, numeric(nb)), binAges, rs, re)
+  mrb <- cfg$member_ref_bp                              # NULL => full-record centering (default)
+  globalEns <- apply_reference(vapply(cols, area_weight, numeric(nb)), binAges, rs, re, mrb)
   bandEns <- lapply(seq_len(N_BANDS), function(b)
-    apply_reference(vapply(cols, function(m) m[, b], numeric(nb)), binAges, rs, re))
+    apply_reference(vapply(cols, function(m) m[, b], numeric(nb)), binAges, rs, re, mrb))
   list(global = globalEns, bands = bandEns)
 }

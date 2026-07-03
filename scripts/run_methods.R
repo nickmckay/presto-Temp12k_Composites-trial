@@ -165,10 +165,29 @@ area_weight <- function(bandMat) {           # bandMat: nbins x 6
   out
 }
 
-# subtract each member's full-record mean, then align the ensemble median over
-# the reference period (1800-1900 CE -> ~50-150 yr BP) to zero (paper).
-apply_reference <- function(ens, binAges, ref_start_ce = 1800, ref_end_ce = 1900) {
-  ens <- sweep(ens, 2, colMeans(ens, na.rm = TRUE), "-")
+# Per-member centering, then align the ensemble median over the reference
+# period (1800-1900 CE -> ~50-150 yr BP) to zero (paper).
+#
+# member_ref_bp: per-member centering window in yr BP (c(lo,hi)). NULL (default)
+#   = subtract each member's FULL-record mean. Empirically (local Phase-1,
+#   DCC + CPS real-ensemble runs vs the NOAA published bands) full-record
+#   centering best reproduces the published uncertainty PROFILE
+#   (band-width profile-corr 0.86 DCC / 0.985 CPS) and mean spread ratio ~1.0.
+#   A mid-Holocene window (e.g. c(3000,5000), SCC's normStart/normEnd) was
+#   TESTED and is WORSE (corr 0.73 / 0.95): compositeEnsembles already aligns
+#   each RECORD over Holocene windows internally, so global-member full-mean
+#   removal is the right final step. Kept configurable for per-method override.
+apply_reference <- function(ens, binAges, ref_start_ce = 1800, ref_end_ce = 1900,
+                            member_ref_bp = NULL) {
+  if (is.null(member_ref_bp)) {
+    ctr <- colMeans(ens, na.rm = TRUE)                    # full-record mean (default, best)
+  } else {
+    wr <- which(binAges >= member_ref_bp[1] & binAges <= member_ref_bp[2])
+    ctr <- apply(ens[wr, , drop = FALSE], 2, mean, na.rm = TRUE)
+    full <- colMeans(ens, na.rm = TRUE)                   # fallback for members with no data in window
+    ctr[!is.finite(ctr)] <- full[!is.finite(ctr)]
+  }
+  ens <- sweep(ens, 2, ctr, "-")
   ref_bp <- c(1950 - ref_end_ce, 1950 - ref_start_ce)   # e.g. c(50,150)
   refrows <- which(binAges >= ref_bp[1] & binAges <= ref_bp[2])
   if (length(refrows) == 0) refrows <- which.min(abs(binAges - 100))
@@ -244,9 +263,10 @@ run_method <- function(method, fts, bandIdx, gridIdx, binvec, binAges, nens,
     if (is.matrix(m) && all(dim(m) == c(nb, N_BANDS))) m else matrix(NA_real_, nb, N_BANDS))
 
   rs <- cfg$ref_start %||% 1800; re <- cfg$ref_end %||% 1900
-  globalEns <- apply_reference(vapply(cols, area_weight, numeric(nb)), binAges, rs, re)
+  mrb <- cfg$member_ref_bp                              # NULL => full-record centering (default)
+  globalEns <- apply_reference(vapply(cols, area_weight, numeric(nb)), binAges, rs, re, mrb)
   bandEns <- lapply(seq_len(N_BANDS), function(b)
-    apply_reference(vapply(cols, function(m) m[, b], numeric(nb)), binAges, rs, re))
+    apply_reference(vapply(cols, function(m) m[, b], numeric(nb)), binAges, rs, re, mrb))
   list(global = globalEns, bands = bandEns)
 }
 
@@ -381,6 +401,9 @@ main <- function() {
     paico_reg_param = cfg$advanced$paico_reg_param,
     ncores = ncores,
     seed = as.integer(cfg$advanced$seed %||% 42),  # same default as gam_method.py
+    # per-member centering window in yr BP; NULL/absent = full-record mean
+    # (empirically best vs published bands; see apply_reference doc)
+    member_ref_bp = cfg$advanced$member_ref_bp,
     ref_start = refp$start, ref_end = refp$end)
 
   # write <m>_global.csv (binAges + ens) and <m>_bands.csv (binAges, band, ens)

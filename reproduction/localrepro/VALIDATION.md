@@ -23,8 +23,8 @@ pygam 0.12 venv; MATLAB R2023a.
 
 | method | tag | orig driver | fresh-orig vs committed | noise floor | template stack | status |
 |---|---|---|---|---|---|---|
-| DCC | temp12kEnsemble | DCC.R (R, cR@1e3e0f2e) | **maxD 0.031** | (run2 pending) | pending | orig ✓ |
-| CPS | temp12kEnsemble | cps12k.R | in flight | pending | pending | running |
+| DCC | temp12kEnsemble | DCC.R (R, cR@1e3e0f2e) | **maxD 0.031** | **0.029** | pending | orig ✓✓ |
+| CPS | temp12kEnsemble | cps12k.R (R, cR@1e3e0f2e) | **maxD 0.078** | (run2 pending) | pending | orig ✓ |
 | SCC | Temp12k | SCC_GMST_122719.m (MATLAB) | BLOCKED (license -8) | — | pending | blocked |
 | PaiCo | temp12kEnsemble | PaiCo_12k_ensemble.m (MATLAB) | (MATLAB) | — | pending | pending |
 | GAM | Temp12k | GAM_frozen (Python) | pending | pending | pending | pending |
@@ -39,6 +39,38 @@ set, nens=500, publication-era compositeR:
 This is the DCC noise floor ballpark (one realization vs the published
 realization). Confirms the whole chain — lpd load, chron-repair, compositeR
 engine — reproduces the publication. run2 pending to bound the floor.
+
+## Reference-period test (per-member centering window) — user question
+
+Question: does anchoring to a data-rich Holocene mean (vs the short recent
+window) reduce apparent uncertainty and better match the paper?
+
+Findings:
+1. The published product is pinned to median = 0 at exactly 100 BP (all five
+   methods) for REPORTING, but its uncertainty band is NOT collapsed there
+   (DCC band 0.52 wide @100 BP vs 0.38 @4 ka). So the paper aligns members in
+   the data-rich Holocene, then applies a cosmetic scalar to report vs ~1850.
+2. The scoring `spread` metric is band-width ratio → invariant to any scalar
+   anchor. So changing the *reporting* reference alone changes nothing.
+3. The real lever is the PER-MEMBER centering window. Tested directly on the
+   real 500-member DCC and CPS ensembles (band-width profile vs published):
+
+   | centering window | DCC ratio / corr | CPS ratio / corr |
+   |---|---|---|
+   | full-record (current) | 1.004 / **0.863** | 1.009 / **0.985** |
+   | mid-Holocene 3-5 ka | 1.071 / 0.730 | 1.085 / 0.953 |
+   | Holocene 0-6 ka | 1.023 / 0.804 | 1.029 / 0.979 |
+
+   **Full-record centering already best reproduces the published uncertainty
+   PROFILE for both methods.** Mid-Holocene pinning over-narrows the band in
+   the middle and inflates the ends — worse. Reason: compositeEnsembles
+   aligns each RECORD over Holocene windows internally, so full-mean removal
+   of the GLOBAL members is the correct final step. We are NOT inflating
+   uncertainty via the recent reference.
+
+Implementation: added `advanced.member_ref_bp` knob (`apply_reference` in
+run_methods.R + paico.R). Default NULL = full-record (best). Documented +
+unit-tested; kept for per-method override.
 
 ## Reference sources (decided)
 - DCC, CPS: fresh original R-driver runs (nens=500) — true seed-to-seed floor.
