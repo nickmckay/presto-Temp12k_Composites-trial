@@ -305,10 +305,13 @@ def build(pkl_path: Path, out_json: Path, unc_path: Path = None,
         # which jsonlite parses back to NA in a numeric vector.
         age_j = [None if (v is None or not math.isfinite(v)) else v for v in age]
         values_j = [None if (v is None or not math.isfinite(v)) else v for v in values]
-        # Regenerate the value-ensemble that the published pipeline used (the
-        # pickle's paleoData_values are pre-collapsed single vectors; downstream
-        # methods sample one column per call -- see compositeR's NCOL>1 path).
-        values_ensemble = _build_value_ensemble(values_j, unc, rid)
+        # EXPERIMENT: no regenerated value ensemble. build_fts then passes the
+        # single measurement vector, and compositeR's NCOL==1 path simulates
+        # FRESH per-member AR noise from paleoData_uncertainty1sd with the
+        # per-method ar (sqrt(0.5) DCC/CPS, 0 SCC) instead of drawing from 10
+        # pre-baked AR1(sqrt(0.5)) columns. Motivated by exp/vens100's
+        # dose-response (100 cols much worse than 10).
+        values_ensemble = None
 
         out.append({
             "id": rid,
@@ -317,7 +320,7 @@ def build(pkl_path: Path, out_json: Path, unc_path: Path = None,
             "age": age_j,
             "values": values_j,                      # the original single-realisation measurement
             "values_ensemble": values_ensemble,      # (n_samples x VALUE_ENSEMBLE_SIZE) AR1 noise
-            "values_ensemble_n": VALUE_ENSEMBLE_SIZE,
+            "values_ensemble_n": 0,
             "lat": _safe_float(rec.get("geo_meanLat")),
             "lon": _safe_float(rec.get("geo_meanLon")),
             "elev": _safe_float(rec.get("geo_meanElev")),
