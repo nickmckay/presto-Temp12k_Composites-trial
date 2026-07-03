@@ -1,5 +1,10 @@
 # Fidelity work — session handoff (for continuing on another machine)
 
+> **SUPERSEDED (2026-07-03).** This CI-era phase (determinism fixes, CPS lever
+> sweep) is DONE and MERGED to `main`. Active work moved to LOCAL real-ensemble
+> reproduction — **start at `reproduction/localrepro/HANDOFF.md`** (branch
+> `local/phase1-real-ensembles`). Keep this file for CI-loop mechanics/history.
+
 Goal: improve the presto-Temp12k container's fidelity to Kaufman et al. (2020),
 verified via **GitHub Actions CI** (the container + lipdverse pickle + methods run in
 the cloud). No local Docker/R/pandas required to drive it.
