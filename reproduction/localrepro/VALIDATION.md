@@ -40,9 +40,13 @@ This is the DCC noise floor ballpark (one realization vs the published
 realization). Confirms the whole chain — lpd load, chron-repair, compositeR
 engine — reproduces the publication. run2 pending to bound the floor.
 
-## Blockers
-- **MATLAB license error -8** (HostID mismatch) blocks SCC + PaiCo original
-  reference runs. Options: fix license activation, or fall back to the
-  committed published outputs (`globalComp.mat` equivalents / the `*Rescaled*`
-  and `globalMean*` CSVs already in the repo) as the reference and skip the
-  seed-to-seed floor for the MATLAB methods.
+## Reference sources (decided)
+- DCC, CPS: fresh original R-driver runs (nens=500) — true seed-to-seed floor.
+- **SCC, PaiCo: committed published curves** — MATLAB R2023a is pinned to NAU
+  network license servers (services.cefns.nau.edu / naboo / itslicense1),
+  unreachable here (error -8). Per user decision, use the archived published
+  outputs as the reference: `reference_data/published/{scc,paico}_published.csv`
+  (the NOAA-archived ensemble-median curves, i.e. exactly the acceptance
+  target cmp.py already scores against). No fresh seed-to-seed floor for these
+  two; acceptance = template maxD within the DCC/CPS-measured floor (~0.03).
+- GAM: GAM_frozen Python original (has pinned env) or committed curve.
