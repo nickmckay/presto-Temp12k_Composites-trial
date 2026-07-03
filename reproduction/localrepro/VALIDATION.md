@@ -36,6 +36,26 @@ residuals remain, each understood and scoped:
   running the original GAM_frozen (gam_ensemble.py + its netCDF grids) as the
   true reference; deferred (heavy, and GAM is Python->Python, not a port).
 
+  **GAM fix attempts (2026-07-03) — both surgical fixes FAILED, needs full port.**
+  The published GAM curve IS the archived GAM_frozen output, so no need to run
+  the heavy pyleogrid/psyplot/dask original — just match its algorithm and score
+  vs gam_published.csv. Two divergences from gam_ensemble.py were tested:
+  1. lam gridsearch: original uses pygam DEFAULT (logspace -3..3); template
+     constrains to logspace(-1..3). Tested default -> maxD **1.280**, amp 1.945,
+     spread 2.414 (overfits at 100-yr resolution). Template's constraint is
+     CORRECT; ruled out.
+  2. Reference anchoring: original anchors to MODERN (worldclim + 0-insertion at
+     -35 BP) and keeps all cells; template anchors to 3-5 ka and DROPS cells
+     lacking >=100 mid-Holocene samples. Tested a crude modern-anchor
+     (offset=worldclim absolute temp + 0-insert) -> maxD **10.8** (everything
+     ~2.7C too warm). But that's a BROKEN approximation: the original's
+     _compute_anomaly does proper per-ensemble ALIGNMENT over modern windows
+     (modern_young=-50/modern_old=-20), not a scalar worldclim subtraction.
+  Conclusion: a real GAM fix requires faithfully porting the original's
+  ensemble-alignment + modern-anomaly algorithm (a scoped mini-port of the
+  xarray original), not a one-function patch. Shipping gam_method.py UNCHANGED;
+  GAM stays 0.259 (v1.0.0) / 0.172 (v1.0.2 pickle) as a documented residual.
+
 ## Phase-5 containerization (in progress)
 
 Decisions (user): BUNDLE a slim real-ensemble artifact into the image; target
