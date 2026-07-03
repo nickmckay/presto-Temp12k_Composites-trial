@@ -376,7 +376,9 @@ def fit_cell(args):
         anchor_mask = ref_mask
     y0 = y - float(np.nanmean(y[anchor_mask]))
     try:
-        lam_grid = np.logspace(-1, 3, 11)
+        # EXPERIMENT: dose step 2 — floor at 10 (lam0's floor-at-1 gave maxD
+        # 0.172->0.165 with amp flat; test whether more smoothing keeps helping)
+        lam_grid = np.logspace(1, 3, 7)
         gam = LinearGAM(s(0)).gridsearch(x[:, None], y0, lam=lam_grid, progress=False)
         draws = gam.sample(x[:, None], y0, sample_at_X=bin_ages[:, None],
                            n_draws=n_draws, n_bootstraps=1, quantity="mu")
