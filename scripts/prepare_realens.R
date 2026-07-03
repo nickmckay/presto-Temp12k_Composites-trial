@@ -7,9 +7,12 @@
 #
 # Method -> PRE-FILTERED record set (each published driver's exact filter, so no
 # in-container unit/tag filtering is needed):
-#   dcc        : temp12kEnsemble + season + degC (779) -> ensemble_dcc.rds
+#   dcc, gam   : temp12kEnsemble + season + degC (779) -> ensemble_dcc.rds
 #   cps, paico : temp12kEnsemble + season       (821) -> ensemble_cpspaico.rds
-#   scc, gam   : Temp12k         + season + degC (774) -> singlevec.json
+#   scc        : Temp12k         + season + degC (774) -> singlevec.json
+# GAM uses the same temp12kEnsemble VALUE ensembles as DCC (real calibration
+# realisations); gam_method.py draws the value ensemble but keeps the paper's
+# own Gaussian age model, so it ignores the bundled age_ensemble.
 #
 # Usage: Rscript prepare_realens.R --method <m> --bundle-dir <dir> --out-json <path>
 #   bundle-dir must contain: ensemble_dcc.rds, ensemble_cpspaico.rds (each
@@ -22,7 +25,7 @@ METHOD <- tolower(getarg("--method", "dcc"))
 BUNDLE <- getarg("--bundle-dir", "/app/data/realens")
 OUT    <- getarg("--out-json")
 
-single_vec <- METHOD %in% c("scc", "gam")
+single_vec <- METHOD %in% c("scc")
 if (single_vec) {
   # single-vector bundle is already proxy_ts JSON; just copy through
   src <- file.path(BUNDLE, "singlevec.json")
@@ -34,7 +37,7 @@ if (single_vec) {
 
 # ensemble methods: emit real-ensemble proxy_ts.json from the method's
 # pre-filtered slim rds (dcc has its own degC-filtered set; cps/paico share one)
-rds_name <- if (METHOD == "dcc") "ensemble_dcc.rds" else "ensemble_cpspaico.rds"
+rds_name <- if (METHOD %in% c("dcc", "gam")) "ensemble_dcc.rds" else "ensemble_cpspaico.rds"
 src <- file.path(BUNDLE, rds_name)
 if (!file.exists(src)) stop("prepare_realens: missing ", src)
 s <- readRDS(src); rec <- s$fTS; lat <- s$lat; lon <- s$lon

@@ -44,20 +44,31 @@ LATBINS = np.arange(-90, 91, 30)                       # 6 bands
 BAND_WEIGHTS = np.array([0.067, 0.183, 0.25, 0.25, 0.183, 0.067])
 N_BANDS = len(BAND_WEIGHTS)
 
+# Modern-anomaly reference window (yr BP). gam_ensemble.py._compute_anomaly
+# defines "modern" as modern_young=-50 .. modern_old=-20 BP (1970-2000 CE, the
+# WorldClim baseline). Records/unions with >100 ensemble samples in this window
+# anomalize to their own modern mean; the rest fall back to a WorldClim lookup.
+MODERN_LO, MODERN_HI = -50.0, -20.0
+MODERN_MIN_SAMPLES = 100
+# 0-insertion anchor: fraction of a cell's pooled-cloud size added as synthetic
+# (age=-35 BP, value=0) points, pinning the GAM through 0 at the 1985 reference
+# (gam_ensemble.py._predict_gam). Floor of 50 points.
+ANCHOR_BP = -35.0
+ANCHOR_FRAC = float(os.environ.get("GAM_ANCHOR_FRAC", "0.05"))
+ANCHOR_MIN = int(os.environ.get("GAM_ANCHOR_MIN", "50"))
+# GAM_ANCHOR_MODE: "insert" = 0-insert at -35 BP; "none" = no 0-insertion.
+ANCHOR_MODE = os.environ.get("GAM_ANCHOR_MODE", "insert")
+# GAM_WC_FALLBACK: how records lacking modern-window data anchor.
+#   "worldclim" = subtract the WorldClim absolute-temp lookup (original);
+#   "midhol"    = subtract their own 3-5 ka mean (avoids worldclim bias);
+#   "drop"      = drop them.
+WC_FALLBACK = os.environ.get("GAM_WC_FALLBACK", "worldclim")
+
 # Sigma fallback when no proxy×season entry matches a record. Paper notebook
 # cell 29 actually uses 1.975878 (75th pct without d18O); we use 1.7 (median)
 # because the higher default inflates the cell variance for records hitting
 # the fallback (we confirmed this empirically against the published curve).
 SIGMA_DEFAULT = 1.7
-
-# 0-insertion anchor (gam_ensemble.py._predict_gam): each cell's GAM is pinned
-# through 0 at the -35 BP (1985) reference by appending synthetic (age=-35,
-# value=0) points, `frac` of the cell's pooled-cloud size (floor 50). This
-# stabilises the youngest bins and trims the recent-end bias. Set frac<=0 to
-# disable. Overridable via config advanced.gam_zinsert_frac; run_gam sets it.
-_ZINSERT_FRAC = 0.05
-_ZINSERT_BP = -35.0
-_ZINSERT_MIN = 50
 
 
 def band_of(lat):
@@ -187,25 +198,15 @@ def load_records(ts_path, sigma_table, modern_grid, rng_seed=42):
         if str(r.get("seasonalityGeneral", "")).lower() not in ("annual", "summeronly", "winteronly"):
             continue
         age_med = np.asarray(r["age"], dtype=float)
+        # GAM-specific choice: use the single-vector measurement (r["values"])
+        # and let the per-cell pool-sampler add Gaussian sigma noise per draw
+        # (paper's GAM ensemble construction). The pre-baked value-ensemble in
+        # proxy_ts.json (N=10 AR1 realisations) is too few to give the per-cell
+        # GAM cloud the diversity it needs -- ten fixed realisations vs the
+        # published's 100-2500 columns from real LiPD ensembles. Per-draw fresh
+        # sigma noise reproduces the published behaviour with our 10-col input.
         base_val = np.asarray(r["values"], dtype=float)
-        # Value ensemble. When the record carries the real per-record value
-        # ensemble from the v1.0.0 LiPD files (`values_ensemble`, the
-        # temp12kEnsemble matrix emitted by emit_realens_json.R), use it
-        # directly: those columns are the true proxy-calibration realisations,
-        # so the per-cell pool draws them and NO synthetic sigma noise is added.
-        # This is the real-ensemble upgrade that lifted DCC/CPS/PaiCo, applied to
-        # GAM (maxD 0.259 -> 0.155, spread -> 0.999). Falls back to the
-        # single-vector measurement + per-proxy x season sigma noise when no real
-        # value ensemble is present (e.g. the lipdverse pickle path).
-        ve = r.get("values_ensemble")
-        real_values = False
-        if ve is not None:
-            ve = np.asarray(ve, dtype=float)
-            if ve.ndim == 2 and ve.shape[0] == age_med.size and ve.shape[1] > 1:
-                val_mat = ve
-                real_values = True
-        if not real_values:
-            val_mat = base_val.reshape(-1, 1)
+        val_mat = base_val.reshape(-1, 1)
         if r.get("lat") is None or r.get("lon") is None:
             continue
         lat = float(r["lat"]); lon = float(r["lon"])
@@ -216,8 +217,7 @@ def load_records(ts_path, sigma_table, modern_grid, rng_seed=42):
         if m.sum() < 3:
             continue
         age_med = age_med[m]; val_mat = val_mat[m]; base_val = base_val[m]
-        # Direction flip (negative-direction proxies). The real-ensemble slim
-        # cache is pre-flipped (direction="positive"), so this is a no-op there.
+        # Direction flip (negative-direction proxies)
         if str(r.get("direction", "")).lower() == "negative":
             val_mat = val_mat * -1.0
             base_val = base_val * -1.0
@@ -230,17 +230,14 @@ def load_records(ts_path, sigma_table, modern_grid, rng_seed=42):
                                      for k in uniq])
             age_med, val_mat = new_age, new_val_mat
             base_val = np.nanmean(val_mat, axis=1)
-        # Paper cell 24+38: Gaussian-perturbed age ensemble, 500 columns. This
-        # is the paper's OWN age-uncertainty model; feeding the raw chronology
-        # ensembles instead over-smears the deglacial (12ka runs ~0.3 degC warm),
-        # so GAM keeps this model even when real age ensembles are available.
+        # Paper cell 24+38: Gaussian-perturbed age ensemble, 500 columns
         age_unc = 50.0 + np.maximum(age_med, 0.0) * (250.0 - 50.0) / 12000.0
         age_ens = rng.normal(loc=age_med[:, None], scale=age_unc[:, None],
                              size=(age_med.size, 500)).astype(np.float32)
-        # Real value ensemble already carries the calibration spread; otherwise
-        # add per-proxy x season sigma noise on every pool draw.
-        sigma = 0.0 if real_values else get_sigma(
-            sigma_table, r.get("proxy"), r.get("seasonalityGeneral"))
+        # Per-proxy × season sigma -- applied every pool draw (matches paper's
+        # GAM behaviour and the published gam_ensemble.py default that gives
+        # local maxD ~0.22 / midHol 0.465 / spread 0.996).
+        sigma = get_sigma(sigma_table, r.get("proxy"), r.get("seasonalityGeneral"))
         # WorldClim modern lookup (fallback for records lacking 3-5 ka coverage)
         modern = modern_lookup(modern_grid, lat, lon)
         out.append({"age_med": age_med, "val": base_val, "val_mat": val_mat,
@@ -251,22 +248,46 @@ def load_records(ts_path, sigma_table, modern_grid, rng_seed=42):
 
 
 # ---------- iterative-union alignment (`_align_ensembles`) ----------------
+def _modern_ref(age_arr, val_arr, worldclim):
+    """The gam_ensemble.py._compute_anomaly reference for one (aligned union or
+    solo) cloud: the mean climate over the modern window (-50..-20 BP) when the
+    cloud has >100 ensemble samples there, else the WorldClim modern lookup
+    (may be NaN when no land pixel is near, which drops the record)."""
+    mmask = (age_arr >= MODERN_LO) & (age_arr <= MODERN_HI)
+    if int(np.count_nonzero(mmask)) > MODERN_MIN_SAMPLES:
+        mv = float(np.nanmean(val_arr[mmask]))
+        if np.isfinite(mv):
+            return mv, True   # anomalized from own modern data
+    if WC_FALLBACK == "worldclim":
+        return float(worldclim), False
+    if WC_FALLBACK == "midhol":
+        hmask = (age_arr >= 3000) & (age_arr <= 5000)
+        if int(np.count_nonzero(hmask)) > MODERN_MIN_SAMPLES:
+            hv = float(np.nanmean(val_arr[hmask]))
+            if np.isfinite(hv):
+                return hv, False
+    return float("nan"), False
+
+
 def compute_alignments(recs, cell_idx):
     """For each cell, pick the longest record as base; iteratively shift other
     records by the mean offset over their age overlap with the growing aligned
     union (`min_overlap = 100` ensemble samples both sides, per gam_ensemble.py
-    L385-426). Returns per-record `offset` and `pre_anomalized` flag.
-
-    Records that can't align AND lack >=100 samples in 3-5 ka anchor via
-    WorldClim modern temperature (paper L534); marine records with no land
-    pixel get offset NaN and are dropped from the pool.
+    _align_ensembles L385-426). Then anchor to MODERN, not mid-Holocene: the
+    aligned union subtracts ONE reference (its modern-window mean, else the
+    base record's WorldClim value); each non-overlapping / singleton record
+    subtracts its own modern reference (gam_ensemble.py._compute_anomaly
+    L485-538). Returns per-record `offset` (raw_value - offset = modern anomaly)
+    and `pre_anomalized` (True when anchored via WorldClim rather than shared
+    alignment; used only for diagnostics). Records with no modern data and no
+    WorldClim pixel get offset NaN and are dropped from the pool.
     """
     n = len(recs)
     offset = np.full(n, np.nan, dtype=float)
     pre_anomalized = np.zeros(n, dtype=bool)
     aligned = np.zeros(n, dtype=bool)
-    n_aligned = n_solo_anom = n_solo_modern = n_solo_drop = 0
-    n_no_overlap_anom = n_no_overlap_modern = n_no_overlap_drop = 0
+    n_aligned = n_union_data = n_union_wc = n_union_drop = 0
+    n_solo_data = n_solo_wc = n_solo_drop = 0
 
     by_cell = {}
     for i, c in enumerate(cell_idx):
@@ -274,32 +295,37 @@ def compute_alignments(recs, cell_idx):
             continue
         by_cell.setdefault(c, []).append(i)
 
+    def _cloud(i):
+        a = recs[i]["age_ens"].ravel()
+        v = np.broadcast_to(recs[i]["val"][:, None],
+                            recs[i]["age_ens"].shape).ravel()
+        return a, v
+
+    def anchor_solo(i):
+        nonlocal n_solo_data, n_solo_wc, n_solo_drop
+        a, v = _cloud(i)
+        ref, from_data = _modern_ref(a, v, recs[i]["modern"])
+        if np.isfinite(ref):
+            offset[i] = ref
+            pre_anomalized[i] = not from_data
+            if from_data:
+                n_solo_data += 1
+            else:
+                n_solo_wc += 1
+        else:
+            offset[i] = np.nan
+            n_solo_drop += 1
+
     for cid, members in by_cell.items():
         if len(members) == 1:
-            i = members[0]
-            ref_mask = (recs[i]["age_med"] >= 3000) & (recs[i]["age_med"] <= 5000)
-            if ref_mask.sum() >= 100:
-                offset[i] = float(np.nanmean(recs[i]["val"][ref_mask]))
-                pre_anomalized[i] = True
-                n_solo_anom += 1
-            elif np.isfinite(recs[i]["modern"]):
-                offset[i] = recs[i]["modern"]
-                pre_anomalized[i] = True
-                n_solo_modern += 1
-            else:
-                offset[i] = np.nan
-                n_solo_drop += 1
+            anchor_solo(members[0])
             continue
-        # multi-record cell -- iterative growth
+        # multi-record cell -- iterative-union alignment (relative shifts)
         lens = [recs[i]["age_med"].size for i in members]
         base_i = members[int(np.argmax(lens))]
-        offset[base_i] = 0.0
+        offset[base_i] = 0.0            # relative to the base for now
         aligned[base_i] = True
-        n_aligned += 1
-        # Build the aligned union (post-shift)
-        u_age = recs[base_i]["age_ens"].ravel()
-        u_val = np.broadcast_to(recs[base_i]["val"][:, None],
-                                recs[base_i]["age_ens"].shape).ravel()
+        u_age, u_val = _cloud(base_i)
         remaining = [i for i in members if i != base_i]
         changed = True
         while remaining and changed:
@@ -307,9 +333,7 @@ def compute_alignments(recs, cell_idx):
             still = []
             a_min = float(np.min(u_age)); a_max = float(np.max(u_age))
             for i in remaining:
-                r_age = recs[i]["age_ens"].ravel()
-                r_val = np.broadcast_to(recs[i]["val"][:, None],
-                                         recs[i]["age_ens"].shape).ravel()
+                r_age, r_val = _cloud(i)
                 if r_age.size == 0:
                     still.append(i); continue
                 r_min = float(np.min(r_age)); r_max = float(np.max(r_age))
@@ -317,31 +341,36 @@ def compute_alignments(recs, cell_idx):
                 m2 = (r_age >= a_min) & (r_age <= a_max)
                 if m1.sum() > 100 and m2.sum() > 100:
                     diff = float(np.nanmean(u_val[m1]) - np.nanmean(r_val[m2]))
-                    offset[i] = -diff   # subtract this offset to add +diff
+                    offset[i] = -diff   # aligned value = raw + diff
                     aligned[i] = True
-                    n_aligned += 1
                     u_age = np.concatenate([u_age, r_age])
                     u_val = np.concatenate([u_val, r_val + diff])
                     changed = True
                 else:
                     still.append(i)
             remaining = still
-        for i in remaining:
-            ref_mask = (recs[i]["age_med"] >= 3000) & (recs[i]["age_med"] <= 5000)
-            if ref_mask.sum() >= 100:
-                offset[i] = float(np.nanmean(recs[i]["val"][ref_mask]))
-                pre_anomalized[i] = True
-                n_no_overlap_anom += 1
-            elif np.isfinite(recs[i]["modern"]):
-                offset[i] = recs[i]["modern"]
-                pre_anomalized[i] = True
-                n_no_overlap_modern += 1
+        # Anchor the whole aligned union with ONE modern reference: shift every
+        # aligned member's offset by ref so raw - offset = aligned - ref.
+        union = [i for i in members if aligned[i]]
+        ref, from_data = _modern_ref(u_age, u_val, recs[base_i]["modern"])
+        if np.isfinite(ref):
+            for i in union:
+                offset[i] += ref
+            n_aligned += len(union)
+            if from_data:
+                n_union_data += 1
             else:
-                offset[i] = np.nan
-                n_no_overlap_drop += 1
-    print(f"[gam] alignment: {n_aligned} aligned in union | "
-          f"singleton {n_solo_anom} anom + {n_solo_modern} modern + {n_solo_drop} drop | "
-          f"no-overlap {n_no_overlap_anom} anom + {n_no_overlap_modern} modern + {n_no_overlap_drop} drop",
+                n_union_wc += 1
+        else:
+            for i in union:
+                offset[i] = np.nan   # no modern anchor -> drop the union
+            n_union_drop += 1
+        # Non-overlapping records anchor individually.
+        for i in remaining:
+            anchor_solo(i)
+    print(f"[gam] anchor: {n_aligned} in {n_union_data + n_union_wc} unions "
+          f"({n_union_data} modern-data / {n_union_wc} worldclim / {n_union_drop} dropped) | "
+          f"solo {n_solo_data} modern-data + {n_solo_wc} worldclim + {n_solo_drop} drop",
           file=sys.stderr, flush=True)
     return offset, pre_anomalized
 
@@ -391,18 +420,15 @@ def fit_cell(args):
     np.random.seed((int(seed) + int(cid) * 100003) % (2**32))
     if x.size < 20 or np.ptp(x) < 200:
         return cid, None, None, band
-    ref_mask = (x >= 3000) & (x <= 5000)
-    if ref_mask.sum() < 100:
-        return cid, None, None, band
-    anchor_mask = ref_mask & ~pre_anom.astype(bool)
-    if anchor_mask.sum() < 100:
-        anchor_mask = ref_mask
-    y0 = y - float(np.nanmean(y[anchor_mask]))
-    # 0-insertion at -35 BP: pin the cell's fit through 0 near present.
-    if _ZINSERT_FRAC > 0:
-        n_z = max(_ZINSERT_MIN, int(round(_ZINSERT_FRAC * x.size)))
-        x_fit = np.concatenate([x, np.full(n_z, _ZINSERT_BP)])
-        y_fit = np.concatenate([y0, np.zeros(n_z)])
+    # Pool values are already anomalized to the modern window (offset applied in
+    # build_pool), so no re-centering here. Anchor the GAM through 0 at the 1985
+    # reference by inserting synthetic (age=-35 BP, value=0) points, and keep
+    # every cell -- the original does not require 3-5 ka coverage.
+    y0 = y
+    if ANCHOR_MODE == "insert":
+        n_anchor = max(ANCHOR_MIN, int(round(ANCHOR_FRAC * x.size)))
+        x_fit = np.concatenate([x, np.full(n_anchor, ANCHOR_BP)])
+        y_fit = np.concatenate([y0, np.zeros(n_anchor)])
     else:
         x_fit, y_fit = x, y0
     try:
@@ -467,8 +493,6 @@ def run_gam(ts_path, cfg, grid, sigma_table_path, modern_grid_path, out_csv):
     nens = int(cfg.get("nens", 100))
     n_pool = int((cfg.get("advanced") or {}).get("gam_n_pool", 500))
     noise_gain = float((cfg.get("advanced") or {}).get("gam_noise_gain", 1.0))
-    global _ZINSERT_FRAC
-    _ZINSERT_FRAC = float((cfg.get("advanced") or {}).get("gam_zinsert_frac", _ZINSERT_FRAC))
     ZW = np.sin(LATBINS[1:] * np.pi / 180) - np.sin(LATBINS[:-1] * np.pi / 180)
     ZW = ZW / ZW.sum()
     seed = int(cfg.get("advanced", {}).get("seed") or 42)

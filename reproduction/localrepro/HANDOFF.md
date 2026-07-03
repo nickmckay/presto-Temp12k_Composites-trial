@@ -19,7 +19,7 @@ real v1.0.0 vs NOAA published, maxD; noise floors DCC 0.029 / CPS 0.109):
 | SCC   | 0.088 | ✓ MATLAB→R port reproduces (spread 1.01) |
 | PaiCo | 0.098 | ✓ MATLAB→R port; FIXED (was 0.207, calib-window bug) |
 | CPS   | 0.131 | ✓ near floor |
-| GAM   | 0.259 | ⚠ residual — needs a port (see below) |
+| GAM   | 0.155 | ✓ FIXED via real value ensembles + 0-insert (was 0.259) |
 
 Old synthetic-pickle scores for contrast: DCC 0.074, SCC 0.126, CPS 0.375,
 PaiCo 0.129, GAM 0.172.
@@ -55,34 +55,41 @@ PaiCo 0.129, GAM 0.172.
   fix (0.207→0.098).
 - `entrypoint.sh`: `PRESTO_REALENS=1` mode (uses prepare_realens.R vs pickle).
 - `Dockerfile`: COPY `data/realens/` bundle layer.
-- `scripts/gam_method.py`: UNCHANGED (GAM fixes failed, see below).
+- `scripts/gam_method.py`: **CHANGED — GAM FIXED (2026-07-03), see task 1.**
+  load_records reads `values_ensemble` (real value ens; sigma=0 when present);
+  fit_cell adds 0-insertion at -35 BP (config advanced.gam_zinsert_frac, default
+  0.05). Backward-compatible: single-vector JSON still works (synthetic sigma).
+- `scripts/prepare_realens.R`: gam now routes to ensemble_dcc.rds (was
+  singlevec.json); SCC stays single-vector.
 
 ## NEXT TASKS (in priority order)
 
-### 1. GAM fix — port the original anomaly/alignment algorithm (scoped mini-port)
-GAM is the one method still off (0.259). Cheap fixes were tested and FAILED:
-- default lam gridsearch → maxD 1.280 (overfits); template's lam constraint is
-  CORRECT, ruled out.
-- crude modern-anchoring (subtract worldclim abs temp + 0-insert at -35 BP) →
-  maxD 10.8; a BROKEN approximation.
-The real difference: `gam_ensemble.py::_compute_anomaly` anchors to MODERN via
-per-ensemble ALIGNMENT over modern windows (modern_young=-50, modern_old=-20;
-worldclim 1970-2000) + 0-insertion at -35 BP, and KEEPS all cells; our
-`gam_method.py` anchors to 3-5 ka and DROPS cells lacking ≥100 mid-Holocene
-samples (fit_cell L371-372). Fix = faithfully port that alignment/anomaly logic.
-Reference to match = `reference_data/published/gam_published.csv` (IS the
-archived GAM_frozen output, so no need to run the pyleogrid/psyplot/dask
-original). Test cmd (template GAM on v1.0.0):
+### 1. GAM fix — DONE + FIXED (2026-07-03). maxD 0.259 -> 0.155.
+Two dead ends first, then the fix. (a) The scoped modern-anchor port of
+`gam_ensemble.py::_compute_anomaly` was written+tested
+(`gam_port_refs/gam_modern_FAITHFUL_attempt.py`) and made it WORSE (0.782); the
+anchor is NOT the residual (full decomposition in VALIDATION.md). (b) The actual
+fix is the phase-consistent one — REAL VALUE ensembles + a faithful 0-insertion:
+  - load_records reads the real per-record `values_ensemble` (temp12kEnsemble
+    value matrix from emit_realens_json.R on fts_dcc.rds, 779 records) and draws
+    those calibration realisations instead of single-vector + synthetic sigma.
+    Fixes the uncertainty band: **spread 0.977 -> 0.999**.
+  - fit_cell 0-insertion at -35 BP (frac 0.05) pins each cell through 0 near
+    present, fixing the recent-end registration that WAS the old maxD.
+  - Keeps the paper's Gaussian AGE model (cell 24+38). Feeding the raw chronology
+    ensembles (real ages) over-smears the deglacial (12ka ~0.3 warm) -> use real
+    VALUES only. Result maxD **0.155** (RMSE 0.038; the maxD is one bin at 11300
+    BP; amp 1.105 residual). Test cmd:
 ```
+Rscript reproduction/localrepro/emit_realens_json.R --slim reproduction/localrepro/cache/fts_dcc.rds \
+  --out /tmp/proxy_ts_gam_realens.json --ncols 100     # (R_LIBS_USER=...rlib-f7268c4)
 reproduction/localrepro/venv/bin/python scripts/gam_method.py \
-  --ts reproduction/localrepro/cache/proxy_ts_gam.json --config config/user_config.yml \
+  --ts /tmp/proxy_ts_gam_realens.json --config config/user_config.yml \
   --grid reference_data/equal_area_grid_centers.csv \
   --sigma-table reference_data/proxy_uncertainties.csv \
   --modern-grid reference_data/worldclim_modern_1deg.csv --out-csv /tmp/gam.csv
-python3 reproduction/ci/cmp.py --method gam --csv /tmp/gam.csv
+python3 reproduction/ci/cmp.py --method gam --csv /tmp/gam.csv        # maxD 0.155
 ```
-Scratch experiment copies (this session, in scratchpad, not committed):
-gam_ensemble.py (original), gam_default_lam.py, gam_modern.py (broken).
 
 ### 2. Phase-5 containerization — Docker-gated (Docker NOT installed here)
 Plumbing done + data path validated locally (DCC 0.053, CPS 0.148 via the

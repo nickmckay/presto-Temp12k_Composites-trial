@@ -12,10 +12,12 @@ measured noise floor. Then containerize + productionize (Phase 5).
 | SCC | single-vec | **0.088** | 0.126 | (MATLAB blocked) | ✓ port reproduces, spread 1.01 |
 | CPS | ensemble | **0.131** | 0.375 | 0.109 | ✓ near floor, small residual |
 | PaiCo | ensemble | **0.098** | 0.129 | (MATLAB blocked) | ✓ median reproduces (spread 0.70, target-limited) |
-| GAM | single-vec | **0.259** | 0.172 | — | ⚠ v1.0.0 data effect (input verified clean) |
+| GAM | value-ens | **0.155** | 0.172 | — | ✓ FIXED via real value ensembles (was 0.259) |
 
 *PaiCo was 0.207 with the 0-1000 calibration window; fixed to 0.098 with the
-principled 0-2000 window (below). GAM residual is data-version, not a bug.*
+principled 0-2000 window (below). GAM was 0.259 (single-vector + synthetic sigma
+noise); FIXED to 0.155 by feeding the real per-record VALUE ensembles + a faithful
+0-insertion at -35 BP (below). All five methods now reproduce the publication.*
 
 **Conclusion.** Real ensembles + faithful ports reproduce the ensemble methods
 that matter most: DCC lands exactly at the noise floor, CPS improves 3x
@@ -55,6 +57,77 @@ residuals remain, each understood and scoped:
   ensemble-alignment + modern-anomaly algorithm (a scoped mini-port of the
   xarray original), not a one-function patch. Shipping gam_method.py UNCHANGED;
   GAM stays 0.259 (v1.0.0) / 0.172 (v1.0.2 pickle) as a documented residual.
+
+  **GAM faithful modern-anchor port DONE + REFUTED (2026-07-03, follow-up).**
+  The scoped mini-port was written and tested (gam_port_refs/
+  gam_modern_FAITHFUL_attempt.py): iterative-union alignment (already in the
+  template) + ONE modern-window (-50..-20 BP) reference per aligned union
+  (worldclim fallback for the base) + per-record modern anchor for solos +
+  0-insertion at -35 BP + keep-all-cells (322 fit, only 3 records dropped, vs
+  the baseline's 3-5 ka-coverage cell drops). It reproduces the ORIGINAL's
+  algorithm, and it makes the score WORSE, not better:
+
+  | variant | anchoring | maxD | bias | amp | midHol | 12ka |
+  |---|---|---|---|---|---|---|
+  | baseline (shipping) | 3-5 ka all; drop cells w/o 3-5 ka | **0.259** | -0.064 | 1.119 | 0.387 | -0.815 |
+  | full port | modern + worldclim + 0-insert; keep cells | 0.782 | 0.387 | 1.394 | 0.907 | -0.401 |
+  | V1 | modern + worldclim, no 0-insert | 0.468 | 0.004 | 1.324 | 0.520 | -0.793 |
+  | V2 | modern + 3-5 ka fallback, no 0-insert | 0.261 | -0.170 | 1.184 | 0.292 | -1.007 |
+  | published target | -- | 0 | 0 | 1.00 | 0.45 | -0.70 |
+
+  Decomposition: the 0-insertion at -35 BP forces the recent end to 0, pulling
+  the whole past warm relative to the cmp 100-BP anchor (bias 0.387 -> 0.004 when
+  removed). The worldclim-absolute anchoring on ~180 of 774 records (worldclim
+  land air-temp != SST / seasonal proxy calibration) inflates amplitude
+  (1.18-1.39). NO modern-anchor variant beats the 3-5 ka baseline; the best (V2)
+  only ties maxD with a worse shape. **The anchor is NOT the dominant residual.**
+  Since gam_published.csv IS the GAM_frozen output on the original data, a truly
+  faithful port SHOULD reproduce it; that it does not means the real gap is the
+  input-data reimplementation (our synthetic single-vector 'values' + per-draw
+  sigma noise vs GAM_frozen's REAL value ensembles, its netCDF worldclim, and
+  pygam 0.8 vs 0.12), exactly the class of fix that lifted DCC/CPS/PaiCo when
+  they got REAL ensembles. The phase-consistent lever for GAM is real value
+  ensembles, not the anchor. NEXT-TASK-1 (port the anchor) is CLOSED as refuted.
+
+  **GAM FIXED via real VALUE ensembles (2026-07-03).** Following the refutation
+  above, the phase-consistent lever (real ensembles, which lifted DCC/CPS/PaiCo)
+  was applied to GAM and it WORKS: **maxD 0.259 -> 0.155** (RMSE 0.038, the maxD
+  is one noisy bin at 11300 BP; the curve tracks published within ~0.08
+  everywhere else). Two changes, both in shipping scripts/gam_method.py:
+  1. **Real per-record VALUE ensembles.** load_records now reads `values_ensemble`
+     (the temp12kEnsemble value matrix, emitted by emit_realens_json.R from
+     fts_dcc.rds = temp12kEnsemble+season+degC, 779 records) and draws those
+     real proxy-calibration realisations instead of a single vector + per-draw
+     synthetic sigma noise. This alone fixes the UNCERTAINTY BAND: spread
+     0.977 -> **0.999**.
+  2. **0-insertion at -35 BP** (faithful to gam_ensemble.py._predict_gam):
+     append synthetic (age=-35, value=0) points, frac 0.05 of the pooled cloud,
+     pinning each cell's fit through 0 near present. This fixes the recent-end
+     REGISTRATION that dominated the old maxD (the old 0.259 was entirely the
+     0 BP bin). On the single-vector path it alone drops maxD 0.259 -> 0.104.
+
+  Key diagnostic (why real VALUES, not real AGES): feeding the raw chronology
+  ensembles (real ages) OVER-smears the deglacial -- 12ka runs ~0.3 degC warm
+  (maxD 0.34-0.38) because the real age uncertainty (500-1500 yr) is far wider
+  than the paper's own Gaussian age model (50-250 yr). So gam_method.py keeps the
+  paper's age-perturbation model (cell 24+38, which IS the published GAM's age
+  treatment) and uses only the real VALUE ensembles. Diagnostic table (real
+  value ensembles, 779 records, vs published):
+
+  | config | maxD | amp | spread | midHol | 12ka | bias |
+  |---|---|---|---|---|---|---|
+  | old baseline (single-vec, no 0-insert) | 0.259 | 1.119 | 0.977 | 0.387 | -0.815 | -0.064 |
+  | + real ages + real values (no 0-insert) | 0.382 | 1.031 | 1.022 | 0.592 | -0.454 | 0.138 |
+  | + real values, SYNTHETIC ages (no 0-ins) | 0.163 | 1.107 | 0.999 | 0.430 | -0.761 | -0.022 |
+  | **SHIP: real values + synth ages + 0-insert** | **0.155** | 1.105 | **0.999** | 0.439 | -0.749 | -0.008 |
+  | published target | 0 | 1.00 | 1.00 | 0.45 | -0.70 | 0 |
+
+  Residual: amp 1.105 (curve ~10% too variable); a modest age-width scale (1.5x)
+  trades it to amp 1.033 at maxD 0.165, but 1.0x (the faithful paper age model)
+  gives the best maxD/spread/shape and is the principled choice. Container path
+  wired: prepare_realens.R routes gam -> ensemble_dcc.rds (SCC stays single-vec).
+  Local repro: emit_realens_json.R --slim fts_dcc.rds --out proxy_ts_gam_realens.json,
+  then scripts/gam_method.py --ts proxy_ts_gam_realens.json.
 
 ## Phase-5 containerization (in progress)
 
