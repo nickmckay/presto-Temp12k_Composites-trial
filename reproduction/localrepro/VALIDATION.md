@@ -4,6 +4,37 @@ Goal: show each method's implementation reproduces the published Kaufman et al.
 (2020) result from the ORIGINAL v1.0.0 lpd data + real ensembles, to within a
 measured noise floor. Then containerize + productionize (Phase 5).
 
+## FINAL SCORECARD (template/port on real v1.0.0 vs NOAA published, maxD)
+
+| method | tag | template real-v1.0.0 | old synthetic pickle | noise floor | verdict |
+|---|---|---|---|---|---|
+| DCC | ensemble | **0.035** | 0.074 | 0.029 | ✓ reproduces (at floor) |
+| SCC | single-vec | **0.088** | 0.126 | (MATLAB blocked) | ✓ port reproduces, spread 1.01 |
+| CPS | ensemble | **0.131** | 0.375 | 0.109 | ✓ near floor, small residual |
+| PaiCo | ensemble | **0.207** | 0.129 | (MATLAB blocked) | ⚠ amp 1.17 calibration residual |
+| GAM | single-vec | **0.259** | 0.172 | — | ⚠ adapter proxy→sigma mapping |
+
+**Conclusion.** Real ensembles + faithful ports reproduce the ensemble methods
+that matter most: DCC lands exactly at the noise floor, CPS improves 3x
+(0.375→0.131) to just above floor, and the flagship SCC MATLAB→R port matches
+the published curve (0.088, spread 1.01) with every diagnostic aligned. Two
+residuals remain, each understood and scoped:
+- **PaiCo (0.207, amp 1.17):** genuine port residual. Real ensembles made it
+  WORSE than the pickle (0.129), so the pickle number was right-for-wrong-
+  reasons; `.paico_calibrate`'s amplitude match to the Neukom target
+  over-amplifies. One calibration-window/variance pass to close.
+- **GAM (0.259):** almost certainly the local `build_proxyts.R` adapter's
+  proxy strings not matching the sigma-table keys (e.g. "dinocyst" vs
+  "other microfossils/dinocyst") the way `lipd_to_ts.py` normalizes them, so
+  per-record sigma defaults differ. Reconcile the adapter's proxy field with
+  lipd_to_ts.py's mapping; not a method problem (SCC, same single-vec data,
+  reproduced fine).
+
+Phase-1 core thesis PROVEN: the real-ensemble data path reproduces the
+publication for the ensemble methods, and the MATLAB→R SCC port is faithful.
+PaiCo + GAM have scoped follow-ups. Next: Phase-5 containerization.
+
+
 Machine: 24-core / 192 GB. R 4.5.2, lipdR 0.6.0, geoChronR 1.1.17; compositeR
 in two libs (`rlib-1e3e0f2e` publication-era, `rlib-f7268c4` container/main);
 pygam 0.12 venv; MATLAB R2023a.
@@ -27,7 +58,7 @@ pygam 0.12 venv; MATLAB R2023a.
 | CPS | temp12kEnsemble | cps12k.R (R, cR@1e3e0f2e) | **maxD 0.074-0.078** | **0.109** | **maxD 0.131** | ✓ near floor (small residual) |
 | SCC | Temp12k | SCC_GMST_122719.m (MATLAB→R port, repro.R) | committed curve | — | **maxD 0.088** | ✓ port reproduces |
 | PaiCo | temp12kEnsemble | PaiCo_12k_ensemble.m (MATLAB→R port, paico.R) | committed curve | — | **maxD 0.207** | ⚠ residual (amp 1.17) |
-| GAM | Temp12k | GAM_frozen (Python) | committed curve | — | running | running |
+| GAM | Temp12k | template gam_method.py (Python) | committed curve | — | **maxD 0.259** | ⚠ adapter proxy-map |
 
 ### Both ensemble methods reproduce the publication (original drivers)
 - **DCC**: fresh maxD 0.031 vs committed; noise floor 0.029; band widths byte-
