@@ -141,6 +141,38 @@ compositeR's NCOL>1 path always draws the clean vector) — would tell whether
 value noise helps at all, though spread (0.86 SCC) would drop further.
 VALUE_ENSEMBLE_SIZE=10 stays. The CPS 0.375 baseline stands.
 
+## Data-path drift quantified (2026-07-03, local analysis) — DRIFT IS STRUCTURAL, NOT INVENTORY
+
+Method: downloaded the CI proxy artifact (lipd_legacy.pkl, run 28619537951) and
+diffed its record set against the publication's actual ensemble input list
+(nickmckay/Temperature12k → ScientificDataAnalysis/lipdFilesWithEnsembles,
+698 .lpd files = the datasets the published DCC/CPS/PaiCo consumed).
+
+**Inventory drift: negligible (~1.3%).**
+- Pickle Temp12k tag: 1319 records / 696 datasets. Case-insensitive overlap
+  with the publication's 698: 696. (An earlier exact-case diff suggesting 47
+  missing was filename-case noise.)
+- Truly missing: 2 datasets — `Duranunlak.EPD` (absent), and
+  `Gunnarsfjorden.Allen.2007` (PRESENT in the pickle but tagged lowercase
+  `temp12k`, so the exact-match tag filter drops it — fixable hygiene bug:
+  match inCompilation case-insensitively).
+- 7 more datasets dropped because v1_0_2 reclassified their seasonalityGeneral
+  to `summer+`/`winter+` (excluded by both published and template filters).
+- Pickle-only datasets in the ensemble sense: 0.
+- Selection funnel reproduced locally: 1319 → 807 season-ok (log: 809) → 766
+  degC; 721/807 carry a stated temperature12kUncertainty.
+
+**Structural drift: the real gap.** The publication's 698 lpd files exist to
+carry REAL per-record age + value ensembles (Bacon-style chronologies); the
+lipdverse pickle collapsed everything to single vectors. The template
+approximates with BAM ±5% ages + 10-col AR1 values — and today's sweep showed
+every perturbation of that approximation scores worse. Conclusion: the
+residual CPS gap is dominated by real-vs-synthetic ensemble structure, which
+CANNOT be recovered from the pickle. The one heavy-but-concrete path: have CI
+prepare-data fetch the 698 publication lpd files and attach their real
+ensembles (ageEnsemble matrices; compositeR's NCOL>1 path consumes them
+natively). Large change; park unless per-method fidelity matters enough.
+
 ## Branch map (all pushed to origin)
 - `overnight/fidelity-plan` — housekeeping commits (sin-lat weights, dead-knob docs),
   audit refresh, `reproduction/audit/overnight_2026-07-01.md` write-up, these ci helpers.
