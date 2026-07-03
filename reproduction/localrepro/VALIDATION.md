@@ -25,9 +25,9 @@ pygam 0.12 venv; MATLAB R2023a.
 |---|---|---|---|---|---|---|
 | DCC | temp12kEnsemble | DCC.R (R, cR@1e3e0f2e) | **maxD 0.031** | **0.029** | **maxD 0.035** | ✓✓ template reproduces |
 | CPS | temp12kEnsemble | cps12k.R (R, cR@1e3e0f2e) | **maxD 0.074-0.078** | **0.109** | **maxD 0.131** | ✓ near floor (small residual) |
-| SCC | Temp12k | SCC_GMST_122719.m (MATLAB) | BLOCKED (license -8) | — | pending | blocked |
-| PaiCo | temp12kEnsemble | PaiCo_12k_ensemble.m (MATLAB) | (MATLAB) | — | pending | pending |
-| GAM | Temp12k | GAM_frozen (Python) | pending | pending | pending | pending |
+| SCC | Temp12k | SCC_GMST_122719.m (MATLAB→R port, repro.R) | committed curve | — | **maxD 0.088** | ✓ port reproduces |
+| PaiCo | temp12kEnsemble | PaiCo_12k_ensemble.m (MATLAB→R port, paico.R) | committed curve | — | running | running |
+| GAM | Temp12k | GAM_frozen (Python) | committed curve | — | pending | pending |
 
 ### Both ensemble methods reproduce the publication (original drivers)
 - **DCC**: fresh maxD 0.031 vs committed; noise floor 0.029; band widths byte-
@@ -57,6 +57,14 @@ published `compositeEnsembles` engine via `sampleEnsembleThenBinTs` +
   scaleComposite. Candidate residual sources: scale_to_target vs scaleComposite
   window handling, or the z-scoring (normalizeVariance=TRUE) standardization.
   Next-step investigation; not blocking.
+
+### SCC (MATLAB→R port) — reproduces
+The faithful R port of `SCC_GMST_122719.m` (harness `one_member_scc`: per-record
+±5% BAM age, flat sigma white noise, equal-area gridding, cross-cell median,
+3-5 ka per-record anomaly) on the 774 Temp12k-tag records, nens=500, vs NOAA
+published SCC: **maxD 0.088**, bias -0.006, amp 0.986, midHol 0.485 (pub 0.49),
+12 ka -0.73 (pub -0.77), **spread 1.007** (band 0.596 vs 0.646). Reproduces the
+published SCC; the MATLAB→R port is faithful. (Old synthetic-pickle SCC: 0.126.)
 
 ### Step-3 verdict (ensemble methods)
 Real ensembles + the shipping template reproduce the publication: DCC exactly

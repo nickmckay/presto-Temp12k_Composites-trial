@@ -29,7 +29,7 @@ set.seed(SEED)
 
 # Source only the PaiCo definitions. run_methods.R has a main() at end that reads
 # /results/proxy_ts.json -- inline the few helpers we need to avoid triggering it.
-source("/app/scripts/paico.R")
+source(getarg("--paico-src", "/app/scripts/paico.R"))
 
 # 30-deg latitudinal bands; area weight = (sin lat_hi - sin lat_lo)/2
 N_BANDS <- 6
