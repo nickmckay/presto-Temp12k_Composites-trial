@@ -195,7 +195,12 @@ run_method <- function(method, fts, bandIdx, gridIdx, binvec, binAges, nens,
   } else if (method == "scc") {
     stanFun <- compositeR::standardizeOverInterval
     stanArgs <- list(interval = c(3000, 5000), normalizeVariance = FALSE)
-    binFunArgs <- list(ar = 0)                      # white-noise proxy unc (paper SCC)
+    # EXPERIMENT: published SCC used a FLAT sigma=1.5 white noise for every
+    # record (repro.R:250-281 port note); the template prefers each record's
+    # stated uncertainty1sd. Force the default for all records (uncVar pointing
+    # at a nonexistent field makes sampleEnsembleThenBinTs fall back to
+    # defaultUnc=1.5). Targets SCC under-dispersion (spread 0.864).
+    binFunArgs <- list(ar = 0, uncVar = "no_such_field", defaultUnc = 1.5)
   } else if (method == "cps") {
     # CPS: standardizeMeanIteratively (cps12k.R L77 with defaults), pre-built
     # AR1 value-ensembles in paleoData_values are sampled one column per call
