@@ -44,4 +44,5 @@ advanced:
   cps_duration:     3000          # CPS random standardization interval (<7 ka)
   cps_scale_window: [0, 1000]     # CPS scaling window (yr BP; last millennium)
   gam_spline_k:     25            # GAM penalized B-spline basis dimension
+  gam_noise_gain:   0.5           # EXPERIMENT: residual-noise gain 1.0 -> 0.5
   paico_reg_param:  1.0           # PaiCo regularization parameter
