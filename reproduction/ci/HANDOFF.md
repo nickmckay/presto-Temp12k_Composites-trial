@@ -194,9 +194,16 @@ every run (controls clean):
   decisively; full-2k window stays (knob re-deadened; consider removing it
   from config docs instead).
 
-Round 2 IN FLIGHT: `exp/gam-lam10` (run 28636484065), `exp/scc-flatsigma`
-(run 28636484989; published flat sigma=1.5 for all SCC records, targets
-SCC under-dispersion spread 0.864).
+## Round 2 (runs 28636484065 / 28636484989, 2026-07-03 ~03:55 UTC)
+
+- `exp/gam-lam10` (lam floor→10): GAM 0.189 (+0.017) — over-smoothed.
+  **lam dose-response COMPLETE: floor 0.1 → 0.172 | floor 1 → 0.165 BEST |
+  floor 10 → 0.189. PROMOTE `exp/gam-lam0` (floor=1) to main.**
+- `exp/scc-flatsigma`: bit-identical no-op. Mechanism: compositeR's
+  uncVar/defaultUnc noise path only fires when paleoData_values is
+  single-column; the template's 10-col value ensembles bypass it entirely, so
+  SCC's uncertainty model knobs are DEAD CODE on this pipeline. SCC spread
+  (0.864) not tunable from here; would need per-method value handling. PARKED.
 
 ## Branch map (all pushed to origin)
 - `overnight/fidelity-plan` — housekeeping commits (sin-lat weights, dead-knob docs),
