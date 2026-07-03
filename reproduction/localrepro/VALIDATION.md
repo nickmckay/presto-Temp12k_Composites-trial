@@ -23,12 +23,15 @@ residuals remain, each understood and scoped:
   WORSE than the pickle (0.129), so the pickle number was right-for-wrong-
   reasons; `.paico_calibrate`'s amplitude match to the Neukom target
   over-amplifies. One calibration-window/variance pass to close.
-- **GAM (0.259):** almost certainly the local `build_proxyts.R` adapter's
-  proxy strings not matching the sigma-table keys (e.g. "dinocyst" vs
-  "other microfossils/dinocyst") the way `lipd_to_ts.py` normalizes them, so
-  per-record sigma defaults differ. Reconcile the adapter's proxy field with
-  lipd_to_ts.py's mapping; not a method problem (SCC, same single-vec data,
-  reproduced fine).
+- **GAM (0.259):** NOT an adapter bug (initial guess wrong). Verified via
+  gam_method.load_records on the adapter JSON: 774 records, sigmas 1.12-3.01
+  (only 34 defaults, proxies match via _match_proxy_cat substring), sane degC
+  value ranges, full lat coverage. The template GAM CODE is byte-identical to
+  the CI run that scored 0.172 on the v1.0.2 pickle, so 0.259 is a genuine
+  v1.0.0-vs-v1.0.2 DATA effect through the reimplementation (curve runs cold:
+  midHol 0.387 vs 0.45, 12ka -0.815 vs -0.70, amp 1.12). To close would need
+  running the original GAM_frozen (gam_ensemble.py + its netCDF grids) as the
+  true reference; deferred (heavy, and GAM is Python->Python, not a port).
 
 Phase-1 core thesis PROVEN: the real-ensemble data path reproduces the
 publication for the ensemble methods, and the MATLAB→R SCC port is faithful.
@@ -58,7 +61,7 @@ pygam 0.12 venv; MATLAB R2023a.
 | CPS | temp12kEnsemble | cps12k.R (R, cR@1e3e0f2e) | **maxD 0.074-0.078** | **0.109** | **maxD 0.131** | ✓ near floor (small residual) |
 | SCC | Temp12k | SCC_GMST_122719.m (MATLAB→R port, repro.R) | committed curve | — | **maxD 0.088** | ✓ port reproduces |
 | PaiCo | temp12kEnsemble | PaiCo_12k_ensemble.m (MATLAB→R port, paico.R) | committed curve | — | **maxD 0.207** | ⚠ residual (amp 1.17) |
-| GAM | Temp12k | template gam_method.py (Python) | committed curve | — | **maxD 0.259** | ⚠ adapter proxy-map |
+| GAM | Temp12k | template gam_method.py (Python) | committed curve | — | **maxD 0.259** | ⚠ v1.0.0 data effect (input clean) |
 
 ### Both ensemble methods reproduce the publication (original drivers)
 - **DCC**: fresh maxD 0.031 vs committed; noise floor 0.029; band widths byte-
