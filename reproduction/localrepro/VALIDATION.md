@@ -23,11 +23,19 @@ pygam 0.12 venv; MATLAB R2023a.
 
 | method | tag | orig driver | fresh-orig vs committed | noise floor | template stack | status |
 |---|---|---|---|---|---|---|
-| DCC | temp12kEnsemble | DCC.R (R, cR@1e3e0f2e) | **maxD 0.031** | **0.029** | pending | orig ✓✓ |
-| CPS | temp12kEnsemble | cps12k.R (R, cR@1e3e0f2e) | **maxD 0.078** | (run2 pending) | pending | orig ✓ |
+| DCC | temp12kEnsemble | DCC.R (R, cR@1e3e0f2e) | **maxD 0.031** | **0.029** | pending | orig ✓✓ within noise |
+| CPS | temp12kEnsemble | cps12k.R (R, cR@1e3e0f2e) | **maxD 0.074-0.078** | **0.109** | pending | orig ✓✓ within noise |
 | SCC | Temp12k | SCC_GMST_122719.m (MATLAB) | BLOCKED (license -8) | — | pending | blocked |
 | PaiCo | temp12kEnsemble | PaiCo_12k_ensemble.m (MATLAB) | (MATLAB) | — | pending | pending |
 | GAM | Temp12k | GAM_frozen (Python) | pending | pending | pending | pending |
+
+### Both ensemble methods reproduce the publication (original drivers)
+- **DCC**: fresh maxD 0.031 vs committed; noise floor 0.029; band widths byte-
+  match (0.403). Within noise.
+- **CPS**: fresh maxD 0.074-0.078 vs committed; noise floor 0.109; band widths
+  match (1.22 vs 1.21). Within noise.
+Both confirm the full chain (lpd load, chron-repair, compositeR@1e3e0f2e) on
+the 779-record v1.0.0 ensemble set reproduces Kaufman 2020.
 
 ### DCC (first result)
 Fresh run of the verbatim published `DCC.R` (only environmental patches: bin
