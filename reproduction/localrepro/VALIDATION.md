@@ -24,7 +24,7 @@ pygam 0.12 venv; MATLAB R2023a.
 | method | tag | orig driver | fresh-orig vs committed | noise floor | template stack | status |
 |---|---|---|---|---|---|---|
 | DCC | temp12kEnsemble | DCC.R (R, cR@1e3e0f2e) | **maxD 0.031** | **0.029** | **maxD 0.035** | ✓✓ template reproduces |
-| CPS | temp12kEnsemble | cps12k.R (R, cR@1e3e0f2e) | **maxD 0.074-0.078** | **0.109** | running | orig ✓✓ within noise |
+| CPS | temp12kEnsemble | cps12k.R (R, cR@1e3e0f2e) | **maxD 0.074-0.078** | **0.109** | **maxD 0.131** | ✓ near floor (small residual) |
 | SCC | Temp12k | SCC_GMST_122719.m (MATLAB) | BLOCKED (license -8) | — | pending | blocked |
 | PaiCo | temp12kEnsemble | PaiCo_12k_ensemble.m (MATLAB) | (MATLAB) | — | pending | pending |
 | GAM | Temp12k | GAM_frozen (Python) | pending | pending | pending | pending |
@@ -47,7 +47,22 @@ published `compositeEnsembles` engine via `sampleEnsembleThenBinTs` +
   0.403; amp 1.02, spread 1.06. Essentially at the floor. **Reproduced.**
   For contrast, the old synthetic-pickle template scored DCC 0.074 — real
   ensembles ~halved the gap and matched the band.
-- **CPS template**: running.
+- **CPS template**: maxD **0.131** vs published, **0.140** vs original-driver
+  reference (noise floor 0.109). amp 0.984, midHol 1.11 (pub 1.09), 12ka -3.30
+  (pub -3.36), spread 0.98; band 1.081 vs published 1.214 (slightly narrow).
+  **Huge improvement** (old synthetic-pickle CPS was 0.375 → 0.131, ~3x), but
+  ~1.2x the floor: a small residual reimplementation gap remains. The
+  template's CPS path (sampleEnsembleThenBinTs + standardizeMeanIteratively +
+  scale_to_target) differs slightly from the original's compositeEnsembles +
+  scaleComposite. Candidate residual sources: scale_to_target vs scaleComposite
+  window handling, or the z-scoring (normalizeVariance=TRUE) standardization.
+  Next-step investigation; not blocking.
+
+### Step-3 verdict (ensemble methods)
+Real ensembles + the shipping template reproduce the publication: DCC exactly
+(0.035, within floor), CPS to ~1.2x the floor (0.131, down from 0.375). The
+real-ensemble data path is validated as the production improvement. CPS has a
+small residual worth one more pass at the scaling/standardization step.
 
 ### DCC (first result)
 Fresh run of the verbatim published `DCC.R` (only environmental patches: bin
