@@ -45,7 +45,8 @@ area_weight <- function(bandMat) {
   den <- rowSums(w, na.rm = TRUE)
   out <- num / den; out[den == 0] <- NA; out
 }
-apply_reference <- function(ens, binAges, ref_start_ce = 1800, ref_end_ce = 1900) {
+apply_reference <- function(ens, binAges, ref_start_ce = 1800, ref_end_ce = 1900,
+                            member_ref_bp = NULL) {   # member_ref_bp ignored: full-record default
   ens <- sweep(ens, 2, colMeans(ens, na.rm = TRUE), "-")
   ref_bp <- c(1950 - ref_end_ce, 1950 - ref_start_ce)
   refrows <- which(binAges >= ref_bp[1] & binAges <= ref_bp[2])

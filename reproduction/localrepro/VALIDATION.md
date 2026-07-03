@@ -26,8 +26,8 @@ pygam 0.12 venv; MATLAB R2023a.
 | DCC | temp12kEnsemble | DCC.R (R, cR@1e3e0f2e) | **maxD 0.031** | **0.029** | **maxD 0.035** | ✓✓ template reproduces |
 | CPS | temp12kEnsemble | cps12k.R (R, cR@1e3e0f2e) | **maxD 0.074-0.078** | **0.109** | **maxD 0.131** | ✓ near floor (small residual) |
 | SCC | Temp12k | SCC_GMST_122719.m (MATLAB→R port, repro.R) | committed curve | — | **maxD 0.088** | ✓ port reproduces |
-| PaiCo | temp12kEnsemble | PaiCo_12k_ensemble.m (MATLAB→R port, paico.R) | committed curve | — | running | running |
-| GAM | Temp12k | GAM_frozen (Python) | committed curve | — | pending | pending |
+| PaiCo | temp12kEnsemble | PaiCo_12k_ensemble.m (MATLAB→R port, paico.R) | committed curve | — | **maxD 0.207** | ⚠ residual (amp 1.17) |
+| GAM | Temp12k | GAM_frozen (Python) | committed curve | — | running | running |
 
 ### Both ensemble methods reproduce the publication (original drivers)
 - **DCC**: fresh maxD 0.031 vs committed; noise floor 0.029; band widths byte-
@@ -65,6 +65,18 @@ The faithful R port of `SCC_GMST_122719.m` (harness `one_member_scc`: per-record
 published SCC: **maxD 0.088**, bias -0.006, amp 0.986, midHol 0.485 (pub 0.49),
 12 ka -0.73 (pub -0.77), **spread 1.007** (band 0.596 vs 0.646). Reproduces the
 published SCC; the MATLAB→R port is faithful. (Old synthetic-pickle SCC: 0.126.)
+
+### PaiCo (MATLAB→R port) — residual gap
+paico.R (pairwise-comparison MLE + Neukom-2k calibration) on the 821
+temp12kEnsemble records, nens=500, vs NOAA published PaiCo: **maxD 0.207**,
+bias -0.004, amp **1.173** (17% over-amplified), midHol 0.467 (pub 0.42), 12 ka
+-0.898 (pub -0.72, too cold), spread 0.977 (band 0.307 vs 0.314 — good).
+The gap is amplitude/shape, not spread. NOTE: unlike DCC/CPS, real ensembles
+made PaiCo WORSE than the synthetic pickle (0.129 → 0.207) — the pickle's
+0.129 was likely right-for-wrong-reasons (cf. the CI-era findings). The honest
+real-ensemble number reveals a calibration residual in the port: the
+.paico_calibrate amplitude match to the Neukom target over-amplifies with real
+value ensembles. Needs a follow-up pass on the calibration window/variance.
 
 ### Step-3 verdict (ensemble methods)
 Real ensembles + the shipping template reproduce the publication: DCC exactly
