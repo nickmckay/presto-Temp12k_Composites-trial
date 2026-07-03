@@ -98,6 +98,32 @@ pair at a second seed if the delta is small).
    axis: value-ensemble regeneration quality (10-col AR1 from single vector vs
    paper's real ensembles), CPS scaling target, or record subset.
 
+## CPS lever sweep (2026-07-02 ~23:40 UTC): ALL THREE REJECTED
+
+Three single-variable paired experiments off seeded main (canonical baseline
+SCC 0.126, DCC 0.074, GAM 0.172, CPS 0.375, PaiCo 0.129). In every run the
+untouched methods scored EXACTLY baseline (perfect controls):
+
+| experiment | branch / run | CPS | other deltas | verdict |
+|---|---|---|---|---|
+| A: VALUE_ENSEMBLE_SIZE 10→100 | `exp/vens100` / 28627452408 | 0.547 (+0.172) | SCC +0.066, DCC +0.015, PaiCo +0.001, GAM 0 | REJECTED |
+| B: CPS scale to Neukom targets | `exp/cps-neukom-target` / 28627453339 | 3.168 (catastrophic; spread 0.17) | all others exactly 0 | REJECTED (target units/variance mismatch) |
+| C: CPS degC-only records (faithful to cps12k.R) | `exp/cps-degc` / 28627454180 | 0.624 (+0.249) | all others exactly 0 | REJECTED |
+
+**Readings:**
+- Main's current config is locally optimal on all three axes; the CPS 0.375
+  baseline stands.
+- Counterintuitive pattern: every change MORE faithful to the published
+  pipeline (publication compositeR pin, degC-only CPS subset) scores WORSE
+  against the published curve. The template's divergences apparently
+  compensate for each other (or for pickle-data drift). Single-axis
+  faithfulness restoration is a dead approach; remaining gap likely needs
+  either multi-axis simultaneous changes or is data-path (pickle vs
+  publication input) and unfixable from here.
+- A's dose-response (10 cols good, 100 cols bad) suggests trying
+  VALUE_ENSEMBLE_SIZE=1 (or dropping regeneration so compositeR simulates
+  per-member AR1 noise from paleoData_uncertainty1sd) as a cheap follow-up.
+
 ## Branch map (all pushed to origin)
 - `overnight/fidelity-plan` — housekeeping commits (sin-lat weights, dead-knob docs),
   audit refresh, `reproduction/audit/overnight_2026-07-01.md` write-up, these ci helpers.
@@ -108,8 +134,10 @@ pair at a second seed if the delta is small).
 - `baseline/fresh-nens500`, `exp/cr-pin-nens500` — nens=500 replicate pairs; PARKED.
 - `exp/seed-rng` — determinism fixes; VERIFIED byte-identical; MERGED to main
   2026-07-02 (fast-forward to 4f96457).
-- `exp/cr-pin-seeded` — seeded main + cherry-picked compositeR pin; paired
-  re-test run 28624661235 in flight 2026-07-02 ~22:0x UTC.
+- `exp/cr-pin-seeded` — seeded main + compositeR pin; paired re-test REJECTED
+  (CPS +0.075, PaiCo +0.044, SCC +0.024 worse).
+- `exp/vens100`, `exp/cps-neukom-target`, `exp/cps-degc` — CPS lever sweep;
+  all three REJECTED (see table above).
 
 ## Project memory (copy or re-read)
 Machine-local at `~/.claude/projects/-Users-nicholas-GitHub-presto-Temp12k-Composites-trial/memory/`
