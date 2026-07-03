@@ -291,10 +291,14 @@ scaleCompositeLocal <- function(composite, binvec, scaleYears, scaleData,
 # scaleCompositeLocal draws one ensemble column internally when scaleData has >1 col.
 scale_to_target <- function(comp, binvec, binAges, target, cfg) {
   if (is.null(target)) return(comp)
+  # EXPERIMENT: honor the (previously dead) cps_scale_window config knob
+  # (default [0,1000] BP = last millennium) instead of the fixed full 2k.
+  sw <- cfg$cps_scale_window
+  if (is.null(sw) || length(sw) != 2) sw <- c(0, 2000)
   out <- tryCatch(
     scaleCompositeLocal(composite = comp, binvec = binvec,
                         scaleYears = 1950 - target$ages, scaleData = target$mat,
-                        scaleWindow = 1950 - c(0, 2000),
+                        scaleWindow = 1950 - sw,
                         rescale = TRUE, scaleVariance = TRUE),
     error = function(e) { message("scale_to_target error: ", conditionMessage(e)); comp })
   out
