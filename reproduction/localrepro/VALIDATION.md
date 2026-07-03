@@ -54,15 +54,27 @@ the shared temp12kEnsemble set (DCC/CPS/PaiCo). Single-vector set (SCC/GAM) is
 tiny. Acceptable as a bundled image layer. Fewer cols shrink it at a small maxD
 cost (100 cols already costs +0.018 vs full).
 
-**Remaining containerization steps:**
-1. Bundle: one subsampled ensemble artifact (temp12kEnsemble ~821 recs) +
-   one single-vector proxy_ts.json (Temp12k ~774 recs); COPY into image.
-2. entrypoint: PRESTO_REALENS mode emits proxy_ts.json from the bundled
-   artifact (in-container R) instead of lipd_to_ts.py(pickle); method picks the
-   ensemble vs single-vector set by its tag.
-3. Dockerfile: COPY the bundle + emit script.
-4. CI/build: build image, run per-method, verify byte-determinism + scores
-   match this ledger. (Needs Docker.)
+**Container plumbing IMPLEMENTED + data path validated locally:**
+- `scripts/prepare_realens.R` — in-container emit from method-specific
+  pre-filtered bundles (dcc 779 / cps+paico 821 / scc+gam 774 single-vec).
+- `entrypoint.sh` — PRESTO_REALENS=1 swaps lipd_to_ts.py(pickle) for it.
+- `Dockerfile` — COPY data/realens/ bundle layer.
+- `reproduction/localrepro/build_realens_bundle.sh` — builds the bundle (build
+  input, gitignored ~150MB each rds; regenerate per data version).
+
+**Bundle-path reproduction (prepare_realens.R -> run_methods.R main()):**
+| method | RDS shortcut | full bundle JSON path | note |
+|--------|-------------|----------------------|------|
+| DCC | 0.035 | **0.053** | +0.018 = 100-col subsampling |
+| CPS | 0.131 | **0.148** | +0.017 = 100-col subsampling |
+Both reproduce via the production path; log confirms age path=ageEnsemble.
+The ~0.017 subsampling cost is consistent; raise --ncols to tighten vs size.
+
+**Remaining (Docker-gated — Docker not installed locally):**
+1. `build_realens_bundle.sh` to populate data/realens/ (build input).
+2. `docker build` the image; run per-method with PRESTO_REALENS=1.
+3. CI byte-determinism (two identical runs) + scores match this ledger.
+4. Then switch data version to v1.0.2 (rebuild bundle from v1.0.2 lpds).
 
 Phase-1 core thesis PROVEN: the real-ensemble data path reproduces the
 publication for the ensemble methods, and the MATLAB→R SCC port is faithful.
