@@ -1,0 +1,90 @@
+# Validate the REAL-ENSEMBLE reproduction in the container on native amd64.
+#
+# Unlike reconstruct.yml (which runs the legacy pickle path), this builds the
+# image WITH the real-ensemble bundle and runs each method with PRESTO_REALENS=1,
+# then scores the per-method global ensemble against the published Temp12k curves
+# (reproduction/ci/cmp.py) and checks two-run byte-determinism.
+#
+# Native amd64 runners avoid the two Apple-Silicon-emulation limits seen locally
+# (the GAM multiprocessing pool deadlock, and the 8 GB Docker OOM on DCC/CPS).
+#
+# The real-ensemble bundle (data/realens/*.rds, ~260 MB) is gitignored and built
+# from large local caches, so the runner fetches it from a GitHub release
+# (realens-bundle-v1.0.0) into data/realens/ before `docker build`.
+
+name: Validate real-ensemble reproduction
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [local/phase1-real-ensembles]
+    paths:
+      - '.github/workflows/validate-realens.yml'
+      - 'scripts/**'
+      - 'entrypoint.sh'
+      - 'Dockerfile'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        method: [scc, dcc, gam, cps, paico]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch real-ensemble bundle from release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/realens
+          gh release download realens-bundle-v1.0.0 \
+            --repo "${{ github.repository }}" \
+            --pattern 'ensemble_*.rds' --pattern 'singlevec.json' \
+            --dir data/realens/
+          ls -lh data/realens/
+
+      - name: Build container
+        run: docker build -t presto-temp12k:local .
+
+      - name: Run ${{ matrix.method }} (real ensembles) x2 for determinism
+        run: |
+          for run in 1 2; do
+            mkdir -p "results${run}"
+            docker run --rm \
+              -e PRESTO_REALENS=1 \
+              -e PRESTO_STAGE=methods \
+              -e PRESTO_ONLY_METHOD=${{ matrix.method }} \
+              -v "$(pwd)/config/user_config.yml:/app/config/user_config.yml:ro" \
+              -v "$(pwd)/results${run}:/results" \
+              presto-temp12k:local
+          done
+
+      - name: Score vs published + determinism
+        run: |
+          python3 -m pip install --quiet numpy
+          M=${{ matrix.method }}
+          CSV="results1/methods/${M}_global.csv"
+          if [ ! -f "$CSV" ]; then
+            echo "::error::${M}_global.csv not produced"; ls -lR results1 || true; exit 1
+          fi
+          echo "===== ${M} score vs published (real ensembles, in-container) ====="
+          python3 reproduction/ci/cmp.py --method "$M" --csv "$CSV"
+          echo "===== ${M} two-run byte-determinism ====="
+          if diff -q "results1/methods/${M}_global.csv" "results2/methods/${M}_global.csv"; then
+            echo "DETERMINISM: byte-identical across two runs ✓"
+          else
+            echo "::error::${M} not deterministic across two runs"; exit 1
+          fi
+
+      - name: Upload per-method ensemble
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: realens-${{ matrix.method }}-${{ github.run_id }}
+          path: results1/methods/${{ matrix.method }}_*.csv
+          retention-days: 7
