@@ -16,7 +16,7 @@ real v1.0.0 vs NOAA published, maxD; noise floors DCC 0.029 / CPS 0.109):
 | method | maxD | status |
 |--------|------|--------|
 | DCC   | 0.035 | ✓ at floor |
-| SCC   | 0.088 | ✓ MATLAB→R port reproduces (spread 1.01) |
+| SCC   | 0.088 | ✓ port 0.088 / container run_methods.R 0.091 (cross-cell median) |
 | PaiCo | 0.098 | ✓ MATLAB→R port; FIXED (was 0.207, calib-window bug) |
 | CPS   | 0.131 | ✓ near floor |
 | GAM   | 0.155 | ✓ FIXED via real value ensembles + 0-insert (was 0.259) |
@@ -51,65 +51,43 @@ PaiCo 0.129, GAM 0.172.
 - `scripts/run_methods.R`: `build_fts` reads `age_ensemble`; `run_method` takes
   `cfg$age_var` and main() auto-sets it to "ageEnsemble" when real ensembles are
   present. `apply_reference` gains `member_ref_bp` (default full-record = best).
+  **SCC gridding uses cross-cell MEDIAN** (was mean; gridCells branch only, so
+  DCC/CPS unaffected) — the SCC fix, maxD 0.178→0.091.
 - `scripts/paico.R`: `cfg$paico_calib_window` default **c(0,2000)** — the PaiCo
   fix (0.207→0.098).
-- `entrypoint.sh`: `PRESTO_REALENS=1` mode (uses prepare_realens.R vs pickle).
+- `scripts/gam_method.py`: **GAM FIXED.** load_records reads `values_ensemble`
+  (real value ens; sigma=0 when present); fit_cell adds 0-insertion at -35 BP
+  (advanced.gam_zinsert_frac, default 0.05); BLAS/OMP thread-pin + configurable
+  pool start method (advanced.gam_mp_context / GAM_MP_CONTEXT). Backward-compat:
+  single-vector JSON still works (synthetic sigma).
+- `scripts/prepare_realens.R`: **all 5 methods use real ensembles** — scc/dcc/gam
+  → ensemble_dcc.rds, cps/paico → ensemble_cpspaico.rds. singlevec.json now unused.
+- `entrypoint.sh`: `PRESTO_REALENS=1` mode; runs prepare_realens.R **from /** so
+  renv/jsonlite activate (was broken: ran from /app).
 - `Dockerfile`: COPY `data/realens/` bundle layer.
-- `scripts/gam_method.py`: **CHANGED — GAM FIXED (2026-07-03), see task 1.**
-  load_records reads `values_ensemble` (real value ens; sigma=0 when present);
-  fit_cell adds 0-insertion at -35 BP (config advanced.gam_zinsert_frac, default
-  0.05). Backward-compatible: single-vector JSON still works (synthetic sigma).
-- `scripts/prepare_realens.R`: gam now routes to ensemble_dcc.rds (was
-  singlevec.json); SCC stays single-vector.
+- `.github/workflows/validate-realens.yml`: per-method matrix, PRESTO_REALENS=1
+  x2, score vs published + maxD-ceiling assert + byte-determinism.
 
-## NEXT TASKS (in priority order)
+## STATUS: Phase-1 (fidelity) + Phase-5 (containerization) BOTH DONE.
+All 5 methods reproduce the published Kaufman 2020 curves from real v1.0.0
+ensembles, validated in a real container on native amd64 CI (byte-deterministic).
+GAM fix + Phase-5 details are in VALIDATION.md; the two headline results:
+- **GAM**: maxD 0.259→0.155 (real VALUE ensembles + 0-insertion; the
+  modern-anchor port was tried and REFUTED first). Test:
+  `emit_realens_json.R --slim cache/fts_dcc.rds --out /tmp/g.json --ncols 100`
+  then `gam_method.py --ts /tmp/g.json ...` → cmp.py maxD 0.155.
+- **Phase-5 CI**: run 28697594064 green — SCC 0.091, DCC 0.101, GAM 0.118,
+  CPS 0.152, PaiCo 0.107, all byte-identical. Bundle published as the
+  `realens-bundle-v1.0.0` release (gh needs `--repo nickmckay/...`; pushing
+  workflow files needs the token `workflow` scope).
 
-### 1. GAM fix — DONE + FIXED (2026-07-03). maxD 0.259 -> 0.155.
-Two dead ends first, then the fix. (a) The scoped modern-anchor port of
-`gam_ensemble.py::_compute_anomaly` was written+tested
-(`gam_port_refs/gam_modern_FAITHFUL_attempt.py`) and made it WORSE (0.782); the
-anchor is NOT the residual (full decomposition in VALIDATION.md). (b) The actual
-fix is the phase-consistent one — REAL VALUE ensembles + a faithful 0-insertion:
-  - load_records reads the real per-record `values_ensemble` (temp12kEnsemble
-    value matrix from emit_realens_json.R on fts_dcc.rds, 779 records) and draws
-    those calibration realisations instead of single-vector + synthetic sigma.
-    Fixes the uncertainty band: **spread 0.977 -> 0.999**.
-  - fit_cell 0-insertion at -35 BP (frac 0.05) pins each cell through 0 near
-    present, fixing the recent-end registration that WAS the old maxD.
-  - Keeps the paper's Gaussian AGE model (cell 24+38). Feeding the raw chronology
-    ensembles (real ages) over-smears the deglacial (12ka ~0.3 warm) -> use real
-    VALUES only. Result maxD **0.155** (RMSE 0.038; the maxD is one bin at 11300
-    BP; amp 1.105 residual). Test cmd:
-```
-Rscript reproduction/localrepro/emit_realens_json.R --slim reproduction/localrepro/cache/fts_dcc.rds \
-  --out /tmp/proxy_ts_gam_realens.json --ncols 100     # (R_LIBS_USER=...rlib-f7268c4)
-reproduction/localrepro/venv/bin/python scripts/gam_method.py \
-  --ts /tmp/proxy_ts_gam_realens.json --config config/user_config.yml \
-  --grid reference_data/equal_area_grid_centers.csv \
-  --sigma-table reference_data/proxy_uncertainties.csv \
-  --modern-grid reference_data/worldclim_modern_1deg.csv --out-csv /tmp/gam.csv
-python3 reproduction/ci/cmp.py --method gam --csv /tmp/gam.csv        # maxD 0.155
-```
-
-### 2. Phase-5 containerization — DONE + CI-VALIDATED (2026-07-04)
-Bundle built, image builds/runs, validated in a REAL container on native amd64
-via GitHub Actions (`.github/workflows/validate-realens.yml`): downloads the
-bundle from the `realens-bundle-v1.0.0` release, builds the image, runs each
-method PRESTO_REALENS=1 x2, scores vs published + asserts maxD ceiling +
-byte-determinism. CI run 28697594064 = ALL 5 green: SCC 0.091, DCC 0.101,
-GAM 0.118, CPS 0.152, PaiCo 0.107, all byte-identical. Local container runs hit
-Apple-Silicon EMULATION limits only (GAM pool deadlock -> ncores=1; DCC OOM at
-8GB) -- native amd64 CI is clean. Fixes committed: entrypoint.sh renv (run
-prepare_realens.R from /), gam_method.py thread-pin + gam_mp_context,
-**SCC all-NA fix** (route to ensemble_dcc.rds + cross-cell median, see
-VALIDATION.md). Release/run gh cmds need `--repo nickmckay/...` (upstream is
-DaveEdge1) and the `workflow` token scope to push workflow files.
-Remaining: rebuild the bundle from v1.0.2 lpds for production (pickle = fallback).
-
-### 3. Optional CPS residual (0.131, small) + PaiCo spread (0.70, target-limited)
-Both understood and documented; low priority.
-
-## Merge decision
-Branch is ready for review. It changes shipping scripts (guarded/backward-
-compatible defaults) + adds the container real-ensemble path + all localrepro
-tooling. Nothing merged to main yet.
+## REMAINING WORK (for the next session)
+1. **v1.0.2 production data version.** Rebuild the bundle from v1.0.2 lpds
+   (`build_realens_bundle.sh` after rebuilding the fts caches from v1.0.2), re-run
+   the CI validation, confirm scores hold. Pickle path stays the fallback.
+2. **Merge decision.** Branch `local/phase1-real-ensembles` is ready for review:
+   guarded/backward-compatible shipping-script changes + the container
+   real-ensemble path + CI workflow + all localrepro tooling. Nothing merged to
+   main yet.
+3. **Optional residuals (low priority):** CPS 0.131 (small reimpl gap), PaiCo
+   spread 0.70 (target-limited), GAM amp 1.105. All understood + documented.
