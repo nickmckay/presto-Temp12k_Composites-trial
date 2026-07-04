@@ -41,10 +41,12 @@ if [ "$STAGE" = "full" ] || [ "$STAGE" = "methods" ]; then
   # the legacy pickle path (single-vector values + synthetic ensembles).
   if [ "${PRESTO_REALENS:-0}" = "1" ]; then
     echo "[entrypoint] Step: real-ensemble bundle -> proxy_ts.json (method=${ONLY:-all})"
-    Rscript /app/scripts/prepare_realens.R \
+    # Run from / so the renv project at / activates (jsonlite lives in its
+    # library, same as the run_methods.R step below).
+    ( cd / && Rscript /app/scripts/prepare_realens.R \
         --method "${ONLY:-dcc}" \
         --bundle-dir "${PRESTO_REALENS_DIR:-/app/data/realens}" \
-        --out-json "$OUT/proxy_ts.json"
+        --out-json "$OUT/proxy_ts.json" )
   else
     echo "[entrypoint] Step: LiPD pickle -> proxy_ts.json"
     UNC_ARG=""

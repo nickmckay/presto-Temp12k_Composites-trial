@@ -36,6 +36,14 @@ import os
 import sys
 from pathlib import Path
 
+# Pin BLAS/OpenMP to one thread per process BEFORE numpy initialises. fit_cell
+# runs in a multiprocessing pool, so parallelism comes from the pool, not from
+# BLAS; one thread per worker avoids oversubscription (8 workers x N BLAS
+# threads). Honours a value the caller already set.
+for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+           "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+    os.environ.setdefault(_v, "1")
+
 import numpy as np
 import pandas as pd
 import yaml
@@ -521,11 +529,19 @@ def run_gam(ts_path, cfg, grid, sigma_table_path, modern_grid_path, out_csv):
     ncores = int(cfg.get("ncores") or max(1, (os.cpu_count() or 2) - 1))
     ncores = max(1, min(ncores, len(groups)))
     import multiprocessing as mp, time
+    # Pool start method, overridable via advanced.gam_mp_context / env. "fork"
+    # is fastest and correct on native Linux (CI). NOTE: under x86 emulation
+    # (Rosetta/qemu on Apple Silicon) the pool can deadlock in a futex at the
+    # tail with BOTH fork and spawn; the reliable workaround there is ncores=1
+    # (the sequential branch below, no pool). Results are identical across start
+    # methods (per-cell state arrives via picklable args + per-cell seeding).
+    mp_context = (os.environ.get("GAM_MP_CONTEXT")
+                  or (cfg.get("advanced") or {}).get("gam_mp_context", "fork"))
     cell_draws_mu = {}
     cell_scale = {}
     n_done = 0; n_skipped = 0; t0 = time.time()
     if ncores > 1:
-        ctx = mp.get_context("fork")
+        ctx = mp.get_context(mp_context)
         with ctx.Pool(ncores) as pool:
             for cid, dr, sc, bn in pool.imap_unordered(fit_cell, groups, chunksize=1):
                 cell_band[cid] = bn
