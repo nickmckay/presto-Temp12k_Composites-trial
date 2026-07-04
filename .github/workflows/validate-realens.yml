@@ -73,7 +73,22 @@ jobs:
             echo "::error::${M}_global.csv not produced"; ls -lR results1 || true; exit 1
           fi
           echo "===== ${M} score vs published (real ensembles, in-container) ====="
-          python3 reproduction/ci/cmp.py --method "$M" --csv "$CSV"
+          python3 reproduction/ci/cmp.py --method "$M" --csv "$CSV" | tee score.txt
+          # Per-method maxD ceiling (real-ensemble in-container numbers + headroom
+          # for the 100-col subsample variation). A nan (e.g. all-NA composite)
+          # fails the v==v check.
+          case "$M" in
+            scc)   THRESH=0.16 ;;
+            dcc)   THRESH=0.16 ;;
+            gam)   THRESH=0.18 ;;
+            cps)   THRESH=0.22 ;;
+            paico) THRESH=0.17 ;;
+            *)     THRESH=0.25 ;;
+          esac
+          MAXD=$(awk '/^maxD/{print $2}' score.txt)
+          echo "${M}: maxD=${MAXD}, ceiling=${THRESH}"
+          python3 -c "import sys; v=float('${MAXD}'); sys.exit(0 if (v==v and v < ${THRESH}) else 1)" \
+            || { echo "::error::${M} maxD ${MAXD} exceeds ceiling ${THRESH} (or is nan)"; exit 1; }
           echo "===== ${M} two-run byte-determinism ====="
           if diff -q "results1/methods/${M}_global.csv" "results2/methods/${M}_global.csv"; then
             echo "DETERMINISM: byte-identical across two runs ✓"

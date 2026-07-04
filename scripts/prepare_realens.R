@@ -7,16 +7,17 @@
 #
 # Method -> PRE-FILTERED record set (each published driver's exact filter, so no
 # in-container unit/tag filtering is needed):
-#   dcc, gam   : temp12kEnsemble + season + degC (779) -> ensemble_dcc.rds
-#   cps, paico : temp12kEnsemble + season       (821) -> ensemble_cpspaico.rds
-#   scc        : Temp12k         + season + degC (774) -> singlevec.json
-# GAM uses the same temp12kEnsemble VALUE ensembles as DCC (real calibration
-# realisations); gam_method.py draws the value ensemble but keeps the paper's
-# own Gaussian age model, so it ignores the bundled age_ensemble.
+#   dcc, gam, scc : temp12kEnsemble + season + degC (779) -> ensemble_dcc.rds
+#   cps, paico    : temp12kEnsemble + season       (821) -> ensemble_cpspaico.rds
+# All methods use the real temp12kEnsemble VALUE ensembles (real calibration
+# realisations). GAM draws the value ensemble but keeps the paper's own Gaussian
+# age model (ignores the bundled age_ensemble). SCC needs a multi-column value
+# ensemble to composite (a single vector yields an all-NA composite) and its
+# cross-cell MEDIAN gridding (run_methods.R) then reproduces the published curve.
 #
 # Usage: Rscript prepare_realens.R --method <m> --bundle-dir <dir> --out-json <path>
 #   bundle-dir must contain: ensemble_dcc.rds, ensemble_cpspaico.rds (each
-#   list(fTS, lat, lon), chron-repaired, column-subsampled) and singlevec.json.
+#   list(fTS, lat, lon), chron-repaired, column-subsampled).
 suppressPackageStartupMessages(library(jsonlite))
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0 || all(is.na(a))) b else a
 args <- commandArgs(trailingOnly = TRUE)
@@ -25,19 +26,9 @@ METHOD <- tolower(getarg("--method", "dcc"))
 BUNDLE <- getarg("--bundle-dir", "/app/data/realens")
 OUT    <- getarg("--out-json")
 
-single_vec <- METHOD %in% c("scc")
-if (single_vec) {
-  # single-vector bundle is already proxy_ts JSON; just copy through
-  src <- file.path(BUNDLE, "singlevec.json")
-  if (!file.exists(src)) stop("prepare_realens: missing ", src)
-  file.copy(src, OUT, overwrite = TRUE)
-  cat(sprintf("[prepare_realens] %s: single-vector bundle -> %s\n", METHOD, OUT))
-  quit(status = 0)
-}
-
-# ensemble methods: emit real-ensemble proxy_ts.json from the method's
-# pre-filtered slim rds (dcc has its own degC-filtered set; cps/paico share one)
-rds_name <- if (METHOD %in% c("dcc", "gam")) "ensemble_dcc.rds" else "ensemble_cpspaico.rds"
+# emit real-ensemble proxy_ts.json from the method's pre-filtered slim rds
+# (dcc/gam/scc share the degC-filtered set; cps/paico share the no-degC set)
+rds_name <- if (METHOD %in% c("dcc", "gam", "scc")) "ensemble_dcc.rds" else "ensemble_cpspaico.rds"
 src <- file.path(BUNDLE, rds_name)
 if (!file.exists(src)) stop("prepare_realens: missing ", src)
 s <- readRDS(src); rec <- s$fTS; lat <- s$lat; lon <- s$lon

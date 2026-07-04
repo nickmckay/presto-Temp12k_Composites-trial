@@ -155,7 +155,12 @@ band_composite <- function(recs, binvec, binAges, stanFun, stanArgs,
     cnts <- rowsum(t(fin) * 1.0, group = cg)
     cellMat <- t(sums / cnts)            # nbins x ncells; NaN where a cell empty
     cellMat[!is.finite(cellMat)] <- NA
-    comp <- rowMeans(cellMat, na.rm = TRUE)
+    # Cross-cell MEDIAN (SCC_GMST_122719.m gridMat.m: totalMedian =
+    # nanmedian(gridMean, 2)). The per-cell mid-Holocene anomaly distribution is
+    # right-skewed (high-latitude land outliers), so a cross-cell MEAN overshoots
+    # the median warm by ~+0.05-0.09 degC -- the SCC warm bias. Median matches
+    # the validated MATLAB->R port.
+    comp <- apply(cellMat, 1, median, na.rm = TRUE)
   } else {
     comp <- rowMeans(compMat, na.rm = TRUE)
   }
