@@ -163,15 +163,49 @@ cost (100 cols already costs +0.018 vs full).
 Both reproduce via the production path; log confirms age path=ageEnsemble.
 The ~0.017 subsampling cost is consistent; raise --ncols to tighten vs size.
 
-**Remaining (Docker-gated — Docker not installed locally):**
-1. `build_realens_bundle.sh` to populate data/realens/ (build input).
-2. `docker build` the image; run per-method with PRESTO_REALENS=1.
-3. CI byte-determinism (two identical runs) + scores match this ledger.
-4. Then switch data version to v1.0.2 (rebuild bundle from v1.0.2 lpds).
+**Phase-5 DONE — validated in a real container on native amd64 via GitHub
+Actions (2026-07-04).** Docker was installed; the image builds and runs. The
+bundle is too big for git, so it is published as the `realens-bundle-v1.0.0`
+release and `.github/workflows/validate-realens.yml` downloads it, builds the
+image, runs each method with PRESTO_REALENS=1 (x2), scores vs published
+(cmp.py), and asserts a per-method maxD ceiling + two-run byte-determinism.
 
-Phase-1 core thesis PROVEN: the real-ensemble data path reproduces the
-publication for the ensemble methods, and the MATLAB→R SCC port is faithful.
-PaiCo + GAM have scoped follow-ups. Next: Phase-5 containerization.
+CI run 28697594064 (native amd64, ubuntu-latest, 16 GB), real ensembles, all
+under their asserted maxD ceilings + byte-deterministic across two runs:
+| method | maxD | ceiling | determinism |
+|---|---|---|---|
+| SCC | 0.091* | 0.16 | byte-identical |
+| DCC | 0.101 | 0.16 | byte-identical |
+| GAM | 0.118 | 0.18 | byte-identical |
+| CPS | 0.152 | 0.22 | byte-identical |
+| PaiCo | 0.107 | 0.17 | byte-identical |
+All five reproduce the publication. (The first run, 28695473482, was 4/5 green
+and is what EXPOSED the SCC all-NA bug fixed below.)
+
+Container fixes made while validating (all committed):
+- **entrypoint.sh**: run prepare_realens.R from / so the renv project activates
+  (jsonlite). It ran from /app before -> would have failed on the first CI run.
+- **GAM**: the multiprocessing pool deadlocks at the tail ONLY under x86
+  emulation (Rosetta on Apple Silicon); native amd64 CI runs clean. Added a
+  BLAS/OMP thread pin + configurable pool start method; ncores=1 is the
+  emulation workaround. Same story for the local DCC OOM (8 GB Docker) -- the
+  16 GB CI runner handles it.
+- **SCC (*)**: the CI exposed SCC producing an ALL-NA composite. Two causes,
+  both fixed: (a) SCC was fed the single-vector singlevec.json, but
+  run_methods.R's composite yields all-NA on a single-column value matrix ->
+  route SCC to the real value ensembles (ensemble_dcc.rds), like GAM/DCC;
+  (b) run_methods.R's SCC gridding used a cross-cell MEAN, but the published SCC
+  (gridMat.m) uses a cross-cell MEDIAN -- the per-cell mid-Holocene anomaly is
+  right-skewed (high-lat land outliers) so mean overshot warm by ~+0.09 degC.
+  Median fix: maxD 0.178 -> 0.091 (matches the standalone port's 0.088). Isolated
+  to the gridCells branch; DCC/CPS unaffected. singlevec.json is now unused.
+
+**Remaining:** switch the data version to v1.0.2 (rebuild the bundle from v1.0.2
+lpds; the pickle path stays the fallback).
+
+Phase-1 core thesis PROVEN and Phase-5 containerization VALIDATED end-to-end in
+CI: the real-ensemble data path reproduces the publication for all five methods
+inside the container on native amd64, deterministically.
 
 
 Machine: 24-core / 192 GB. R 4.5.2, lipdR 0.6.0, geoChronR 1.1.17; compositeR

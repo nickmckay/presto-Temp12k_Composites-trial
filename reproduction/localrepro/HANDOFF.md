@@ -91,13 +91,20 @@ reproduction/localrepro/venv/bin/python scripts/gam_method.py \
 python3 reproduction/ci/cmp.py --method gam --csv /tmp/gam.csv        # maxD 0.155
 ```
 
-### 2. Phase-5 containerization — Docker-gated (Docker NOT installed here)
-Plumbing done + data path validated locally (DCC 0.053, CPS 0.148 via the
-bundle→proxy_ts.json→run_methods path; +0.017 vs RDS = 100-col subsampling).
-Remaining: `bash reproduction/localrepro/build_realens_bundle.sh` → populate
-`data/realens/`; `docker build`; run per-method `PRESTO_REALENS=1`; CI
-byte-determinism (two identical runs) + scores match the ledger; THEN rebuild
-the bundle from v1.0.2 lpds for production (pickle path stays fallback).
+### 2. Phase-5 containerization — DONE + CI-VALIDATED (2026-07-04)
+Bundle built, image builds/runs, validated in a REAL container on native amd64
+via GitHub Actions (`.github/workflows/validate-realens.yml`): downloads the
+bundle from the `realens-bundle-v1.0.0` release, builds the image, runs each
+method PRESTO_REALENS=1 x2, scores vs published + asserts maxD ceiling +
+byte-determinism. CI run 28697594064 = ALL 5 green: SCC 0.091, DCC 0.101,
+GAM 0.118, CPS 0.152, PaiCo 0.107, all byte-identical. Local container runs hit
+Apple-Silicon EMULATION limits only (GAM pool deadlock -> ncores=1; DCC OOM at
+8GB) -- native amd64 CI is clean. Fixes committed: entrypoint.sh renv (run
+prepare_realens.R from /), gam_method.py thread-pin + gam_mp_context,
+**SCC all-NA fix** (route to ensemble_dcc.rds + cross-cell median, see
+VALIDATION.md). Release/run gh cmds need `--repo nickmckay/...` (upstream is
+DaveEdge1) and the `workflow` token scope to push workflow files.
+Remaining: rebuild the bundle from v1.0.2 lpds for production (pickle = fallback).
 
 ### 3. Optional CPS residual (0.131, small) + PaiCo spread (0.70, target-limited)
 Both understood and documented; low priority.
