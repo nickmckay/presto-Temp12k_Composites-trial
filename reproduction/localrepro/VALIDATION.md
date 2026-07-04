@@ -290,6 +290,58 @@ Neukom CPS target column, but the paper drew from a MULTI-METHOD 2k target
 ensemble (not archived / unavailable), which supplied extra calibration spread.
 Documented data limitation, not a code bug.
 
+### PaiCo — TOO COLD AT THE MID-HOLOCENE (next-session investigation, 2026-07-04)
+Reviewing the real-ensemble validation figures on the Pages site, PaiCo reads
+"significantly too cold." Quantified (container real-ensemble, CI run
+28709969437, vs published PaiCo, anchored 100 BP):
+
+| metric | PaiCo | published |
+|---|---|---|
+| maxD | 0.107 | 0 |
+| amp | **0.879** | 1.00 |
+| spread | **0.658** | 1.00 |
+| midHol (5.5-6.5 ka) | **0.353** | 0.422 |
+| 12 ka | -0.674 | -0.721 |
+| bias | -0.036 | 0 |
+
+Per-age shape (mine - published, degC): the error is CONCENTRATED IN THE
+MID-HOLOCENE / Holocene Thermal Maximum. The recent millennia (0-2 ka) and the
+deglacial (11.75 ka +0.036) are fine; PaiCo runs cold from ~3 ka, worst at 5-8 ka:
+5 ka -0.055, 6 ka -0.082, 7 ka -0.080, **8 ka -0.097 (the maxD)**, 10 ka -0.058.
+So it is a FLATTENED HTM PEAK (under-amplitude amp 0.879), not a uniform cold
+offset. The consensus is unaffected (maxD 0.061, amp 0.972) — PaiCo is the
+weakest of the five but does not drag the pooled result.
+
+NOT container-introduced: the local port (nens=500) had the SAME midHol 0.353
+(vs 0.42) — see the FIXED section above. So this is the known PaiCo amplitude
+limitation, now visible on the site.
+
+Root-cause pointer for the fix: `.paico_calibrate` (scripts/paico.R L111+)
+mean-variance-matches each member to the 2k target over `cfg$paico_calib_window`
+(default c(0,2000) BP) via mul = std(signal)/std(target) over that window. The
+HTM (6-8 ka) is FAR OUTSIDE the calibration window, so its amplitude rides on the
+overall scaling being right; amp 0.879 means the 0-2000 BP match under-scales the
+full-Holocene amplitude, flattening the HTM. Also the target is the bundled
+PAGES2k 2k composite (the paper's exact multi-method 2k target is unarchived),
+which caps both amplitude and spread.
+
+Concrete things to try next session (paico.R):
+1. Print the per-member `si` (signal std) and `sp` (target std) over the calib
+   window to see whether the denominator (sp) is inflating mul downward.
+2. Test the amplitude-scaling window: matching variance over a window that
+   captures more Holocene amplitude (e.g. 0-6 ka, or a full-record variance
+   match decoupled from the 0-2 ka calibration OVERLAP) may lift the HTM without
+   moving the 0-2 ka registration. Watch that it does not re-inflate like the
+   0-1000 window did (0.207).
+3. Sensitivity to the 2k target (PAGES2k composite vs a wider/multi-source
+   target) for amplitude + spread — the documented structural limitation.
+4. Rule out subsampling: container is nens=100 / 100-col; the port was nens=500.
+Repro: `Rscript scripts/run_methods.R --ts <realens proxy_ts.json> --config
+<paico-only, ncores=6> --refdata reference_data --out-dir /tmp/p` then
+`cmp.py --method paico`. Real-ensemble proxy_ts.json: emit_realens_json.R on
+fts_cps.rds (paico shares the cps/no-degC set, 821 records), or reuse the
+container's proxy_ts.json for method=paico.
+
 ### Step-3 verdict (ensemble methods)
 Real ensembles + the shipping template reproduce the publication: DCC exactly
 (0.035, within floor), CPS to ~1.2x the floor (0.131, down from 0.375). The
