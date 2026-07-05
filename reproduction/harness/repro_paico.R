@@ -96,8 +96,13 @@ paico_targets <- load_neukom_targets(file.path(REFDIR, "neukom_targets"))
 n_targets_loaded <- sum(!vapply(paico_targets, is.null, logical(1)))
 cat(sprintf("[repro_paico] Neukom CPS targets loaded for %d/6 bands\n", n_targets_loaded))
 
+CALIB_LO <- as.numeric(getarg("--calib-lo", "0"))
+CALIB_HI <- as.numeric(getarg("--calib-hi", "1000"))   # published last-millennium window (paico.R default)
 cfg <- list(ncores = NCORES, paico_reg_param = 100,
-            ref_start = 1800, ref_end = 1900)
+            ref_start = 1800, ref_end = 1900,
+            seed = SEED,   # per-member RNG stream (matches run_methods.R); also
+                           # drives the paper's random per-band target draw
+            paico_calib_window = c(CALIB_LO, CALIB_HI))
 
 t0 <- Sys.time()
 res <- run_paico(fts, bandIdx, binvec, binAges, NENS,

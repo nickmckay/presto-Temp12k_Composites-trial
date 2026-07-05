@@ -11,13 +11,16 @@ measured noise floor. Then containerize + productionize (Phase 5).
 | DCC | ensemble | **0.035** | 0.074 | 0.029 | ✓ reproduces (at floor) |
 | SCC | single-vec | **0.088** | 0.126 | (MATLAB blocked) | ✓ port reproduces, spread 1.01 |
 | CPS | ensemble | **0.131** | 0.375 | 0.109 | ✓ near floor, small residual |
-| PaiCo | ensemble | **0.098** | 0.129 | (MATLAB blocked) | ✓ median reproduces (spread 0.70, target-limited) |
+| PaiCo | ensemble | **0.036** | 0.129 | (MATLAB blocked) | ✓ FIXED — reproduces exactly (amp 0.98, spread 0.92) |
 | GAM | value-ens | **0.155** | 0.172 | — | ✓ FIXED via real value ensembles (was 0.259) |
 
-*PaiCo was 0.207 with the 0-1000 calibration window; fixed to 0.098 with the
-principled 0-2000 window (below). GAM was 0.259 (single-vector + synthetic sigma
-noise); FIXED to 0.155 by feeding the real per-record VALUE ensembles + a faithful
-0-insertion at -35 BP (below). All five methods now reproduce the publication.*
+*PaiCo: **maxD 0.036** with the exact published scaling (600-member multi-method
+Neukom-CFR target + 0-1000 BP window); **0.054** with the shipped 198-member
+subsample. This SUPERSEDES the earlier "0.098 via 0-2000 window" claim, which was
+backwards — see the PaiCo resolution below. GAM was 0.259 (single-vector +
+synthetic sigma noise); FIXED to 0.155 by feeding the real per-record VALUE
+ensembles + a faithful 0-insertion at -35 BP (below). All five methods reproduce
+the publication.*
 
 **Conclusion.** Real ensembles + faithful ports reproduce the ensemble methods
 that matter most: DCC lands exactly at the noise floor, CPS improves 3x
@@ -270,19 +273,51 @@ published SCC: **maxD 0.088**, bias -0.006, amp 0.986, midHol 0.485 (pub 0.49),
 12 ka -0.73 (pub -0.77), **spread 1.007** (band 0.596 vs 0.646). Reproduces the
 published SCC; the MATLAB→R port is faithful. (Old synthetic-pickle SCC: 0.126.)
 
-### PaiCo (MATLAB→R port) — FIXED (calibration window)
+### PaiCo — FULLY RESOLVED (2026-07-05): scale window + multi-method target
+Root cause of the "too cold HTM" nailed by reading the ORIGINAL published
+pipeline (Christoph/Neukom scripts, recovered from `~/Dropbox/ChristophTemp12k`
+and `~/Dropbox/Holocene GMST`). TWO deviations, both now fixed in `scripts/paico.R`
++ `reference_data/neukom_targets/`:
+
+1. **Scale window.** The published rescaling (`plotPaicoEnsemble.R`) calls
+   `scaleComposite(..., scaleWindow = 1950 - c(1000,2000))` = the LAST MILLENNIUM
+   (0-1000 BP), NOT 0-2000. Our port used 0-2000, which standardises the
+   Arctic-heavy signal by a larger window variance -> under-scales the full
+   Holocene -> flat, cold HTM. Fixed: `paico_calib_window` default -> `c(0,1000)`.
+2. **Target.** The published target is the **600-member multi-method** Neukom-CFR
+   ensemble (`tas_lat_bands_2k_*`: 100 members × AM/CCA/CPS/DA/GraphEM/PCR,
+   anomalies wrt 1850-1900), with a random member drawn per PaiCo member. Our port
+   shipped a single-method 100-member CPS-only target, ~equal to the others in 5
+   bands but too flat in the Arctic (si 0.30 vs the multi-method 0.38 over the
+   last millennium). Fixed: `neukom_targets/` replaced with a method-balanced
+   198-member subsample of the real target (see its README).
+
+Result (nens=100, vs NOAA published, anchored 100 BP):
+
+| config | maxD | amp | midHol | 12ka | bias | spread |
+|---|---|---|---|---|---|---|
+| old (0-2000, CPS-only target) | 0.112 | 0.857 | 0.335 | -0.660 | -0.047 | 0.636 |
+| exact (0-1000, full 600-member) | **0.036** | 0.983 | 0.413 | -0.726 | -0.000 | 0.916 |
+| SHIPPED (0-1000, 198-member subsample) | **0.054** | 0.964 | 0.393 | -0.726 | -0.016 | 0.907 |
+| published target | 0 | 1.00 | 0.42 | -0.72 | 0 | 1.00 |
+
+The HTM cold bias, amplitude, AND the long-standing spread deficit all close
+together — the spread was never a "structural data limitation", it was the
+single-method target. There is **no PAGES2k/Neukom target mixing**; one
+consistent multi-method Neukom-CFR target across all bands.
+
+--- SUPERSEDED (kept for history) — the analysis below wrongly concluded 0-2000 ---
 paico.R (pairwise-comparison MLE + Neukom-2k calibration) on 821 temp12kEnsemble
 records, nens=500, vs NOAA published PaiCo.
 - **Before (0-1000 window): maxD 0.207, amp 1.17** (over-amplified), 12ka -0.898
   (pub -0.72), spread 0.977.
 - **After (0-2000 window): maxD 0.098, amp 0.901**, 12ka -0.697 (pub -0.72,
   ~exact), midHol 0.353 (pub 0.42), spread 0.703.
-Root cause: `.paico_calibrate` sets amplitude via mul=si/sp over the overlap
-window. The PaiCo<->Neukom-2k overlap is 0-2000 BP, but the code used 0-1000,
-where the signal is ~flat -> sp tiny -> mul & amplitude inflate. The Neukom
-target variance is identical over 0-1000 and 0-2000 (0.140), so widening only
-grows sp, lowering mul to amp~0.9. **maxD halved (0.207->0.098).** Fix: default
-`cfg$paico_calib_window = c(0,2000)` in paico.R.
+The 0-2000 conclusion was an ARTIFACT of the single-method target (whose Arctic
+was too flat): widening the window masked the target error by coincidence. With
+the correct multi-method target the 0-1000 window (the published one) is right.
+Historical reasoning: `.paico_calibrate` sets amplitude via mul=si/sp over the
+overlap window; with the old target, 0-1000 over-amplified to 1.17.
 Residual: spread 0.703 (band too narrow). The short window had inflated spread
 AND amplitude together via noisy per-member sp; no single window hits amp=1 and
 spread=1. The spread deficit is STRUCTURAL — we calibrate each member to one
