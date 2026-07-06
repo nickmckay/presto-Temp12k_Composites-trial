@@ -21,6 +21,7 @@ on:
     paths:
       - '.github/workflows/validate-realens.yml'
       - 'scripts/**'
+      - 'reference_data/**'
       - 'entrypoint.sh'
       - 'Dockerfile'
 
@@ -82,7 +83,7 @@ jobs:
             dcc)   THRESH=0.16 ;;
             gam)   THRESH=0.18 ;;
             cps)   THRESH=0.22 ;;
-            paico) THRESH=0.17 ;;
+            paico) THRESH=0.12 ;;   # tightened after the window+multi-method-target fix (local 0.054)
             *)     THRESH=0.25 ;;
           esac
           MAXD=$(awk '/^maxD/{print $2}' score.txt)
