@@ -28,7 +28,7 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180   # nens=500 (paper-faithful) is ~5x nens=100; x2 determinism runs
     strategy:
       fail-fast: false
       matrix:

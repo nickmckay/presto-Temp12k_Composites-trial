@@ -383,6 +383,20 @@ Real ensembles + the shipping template reproduce the publication: DCC exactly
 real-ensemble data path is validated as the production improvement. CPS has a
 small residual worth one more pass at the scaling/standardization step.
 
+### DCC — warm bias was nens=100 sampling scatter (2026-07-05)
+User flagged the deployed real-ensemble DCC as "systematically too warm" (bias
++0.045, midHol 0.575 vs 0.50, maxD 0.101). Root-caused: NOT a code or data bug.
+The template `run_method("dcc")` on the FULL value/age ensembles gives bias +0.009
+(maxD 0.051, ~ the original driver's +0.003). Bisected the container's +0.045 to
+the bundle's 100-col ensemble subsample (values/ages/lat/bands all byte-identical
+between full and bundle; no sign flips; subsample is properly random). But column
+COUNT doesn't predict the bias (100-col: +0.045 or +0.010 by seed; 500-col:
++0.051; full: +0.009) -> it is Monte-Carlo scatter in the ensemble MEDIAN at
+nens=100 (~+-0.04 degC), worst for DCC because its iterative mean-alignment
+standardization is the noisiest of the five methods. Same nens=500 bundle -> bias
++0.011, maxD 0.055. FIX: config nens 100 -> 500 (paper-faithful); validate-realens
+timeout 90 -> 180 min for the ~5x cost. No run_methods.R change.
+
 ### DCC (first result)
 Fresh run of the verbatim published `DCC.R` (only environmental patches: bin
 shim, cache reuse, chron-repair, parameterized IO) on the 779-record v1.0.0
