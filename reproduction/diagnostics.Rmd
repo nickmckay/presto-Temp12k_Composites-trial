@@ -37,6 +37,13 @@ COLORS  <- c(scc = "#4E79A7", dcc = "#59A14F", gam = "#B07AA1",
 anchor <- function(age, y, at = 100) {
   o <- order(age); y - approx(age[o], y[o], xout = at, rule = 2)$y
 }
+# The value of a series at 100 BP -- used to anchor a whole {median, lo, hi}
+# triple by the SAME (median's) offset, so the band keeps its width and the
+# median stays inside it. Anchoring lo/hi by their OWN 100-BP value collapses
+# the band at 100 BP and can push the median outside it.
+off100 <- function(age, y, at = 100) {
+  o <- order(age); approx(age[o], y[o], xout = at, rule = 2)$y
+}
 
 # My reconstruction: median + 5-95% band for a method (or the consensus).
 mine_curve <- function(method) {
@@ -94,10 +101,11 @@ plot_method <- function(method) {
   pm  <- approx(p$age[o], p$med[o], xout = age, rule = 2)$y
   plo <- approx(p$age[o], p$lo[o],  xout = age, rule = 2)$y
   phi <- approx(p$age[o], p$hi[o],  xout = age, rule = 2)$y
-  a0 <- function(y) anchor(age, y)
+  # Anchor each {median, band} by the median's 100-BP offset (one offset per set).
+  mo <- off100(age, m$med); po <- off100(age, pm)
   df <- data.frame(kyr = age / 1000,
-                   me = a0(m$med), mlo = a0(m$lo), mhi = a0(m$hi),
-                   pu = a0(pm), plo = a0(plo), phi = a0(phi))
+                   me = m$med - mo, mlo = m$lo - mo, mhi = m$hi - mo,
+                   pu = pm - po, plo = plo - po, phi = phi - po)
   ggplot(df, aes(kyr)) +
     geom_ribbon(aes(ymin = plo, ymax = phi), fill = "grey55", alpha = 0.25) +
     geom_ribbon(aes(ymin = mlo, ymax = mhi), fill = col, alpha = 0.22) +
@@ -154,9 +162,11 @@ published consensus band.
 ```{r combined, fig.height=5}
 p <- pub_curve("consensus")
 age <- mine_curve("consensus")$age; o <- order(p$age)
+pmed <- approx(p$age[o], p$med[o], xout = age, rule = 2)$y
+pco  <- off100(age, pmed)            # anchor the band by the published-median offset
 band <- data.frame(kyr = age/1000,
-                   lo = anchor(age, approx(p$age[o], p$lo[o],  xout = age, rule = 2)$y),
-                   hi = anchor(age, approx(p$age[o], p$hi[o],  xout = age, rule = 2)$y))
+                   lo = approx(p$age[o], p$lo[o], xout = age, rule = 2)$y - pco,
+                   hi = approx(p$age[o], p$hi[o], xout = age, rule = 2)$y - pco)
 lines <- do.call(rbind, lapply(c(METHODS, "consensus"), function(mth) {
   m <- mine_curve(mth)
   data.frame(kyr = m$age/1000, y = anchor(m$age, m$med), method = LABELS[[mth]])
