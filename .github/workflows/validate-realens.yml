@@ -28,7 +28,8 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 180   # nens=500 (paper-faithful) is ~5x nens=100; x2 determinism runs
+    timeout-minutes: 240   # nens=500 x2-determinism: PaiCo runs ~175 min and can cross 180
+                           # on a slow runner (run 28976558958 timed out at 180); 240 = headroom
     strategy:
       fail-fast: false
       matrix:
