@@ -175,8 +175,9 @@ def modern_lookup(grid, lat, lon):
 
 
 # ---------- record loader ------------------------------------------------
-def load_records(ts_path, sigma_table, modern_grid, rng_seed=42):
-    """Load proxy_ts.json, filter to annual|summerOnly|winterOnly + degC,
+def load_records(ts_path, sigma_table, modern_grid, rng_seed=42, season_filter=False):
+    """Load proxy_ts.json, filter to degC (and, with season_filter, to
+    annual|summerOnly|winterOnly; config presto_season_filter),
     compute per-record sigma + WorldClim modern + Gaussian-perturbed
     age ensemble (500 cols, age_unc = 50 + age*200/12000), decadally
     decimate >1470-sample records (paper notebook cell 19).
@@ -192,7 +193,7 @@ def load_records(ts_path, sigma_table, modern_grid, rng_seed=42):
     for r in recs:
         if str(r.get("units", "")).lower() != "degc":
             continue
-        if str(r.get("seasonalityGeneral", "")).lower() not in ("annual", "summeronly", "winteronly"):
+        if season_filter and str(r.get("seasonalityGeneral", "")).lower() not in ("annual", "summeronly", "winteronly"):
             continue
         age_med = np.asarray(r["age"], dtype=float)
         base_val = np.asarray(r["values"], dtype=float)
@@ -486,7 +487,8 @@ def run_gam(ts_path, cfg, grid, sigma_table_path, modern_grid_path, out_csv):
     print(f"[gam] sigma_table: {len(sigma_table)} entries; "
           f"modern_grid: {'loaded' if modern_grid is not None else 'NONE'}", file=sys.stderr)
 
-    recs = load_records(ts_path, sigma_table, modern_grid, rng_seed=seed)
+    recs = load_records(ts_path, sigma_table, modern_grid, rng_seed=seed,
+                        season_filter=cfg.get("presto_season_filter") is True)
     print(f"[gam] {len(recs)} records after filter", file=sys.stderr)
     if len(recs) < 10:
         raise SystemExit("[gam] too few records")

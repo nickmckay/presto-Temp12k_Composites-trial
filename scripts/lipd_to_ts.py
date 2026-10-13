@@ -28,8 +28,8 @@ Output: proxy_ts.json -- a list of record objects, each:
 Records kept: those in the Temp12k compilation with a temperature
 interpretation (--any-compilation drops the membership test, for PReSto pool
 bundles already selected by the Temperature 12k criteria). Method-specific subsetting (degC-only for SCC/DCC; seasonality
-{annual,summerOnly,winterOnly}) is applied downstream so the JSON stays a
-faithful superset.
+{annual,summerOnly,winterOnly} when presto_season_filter is true) is applied
+downstream so the JSON stays a faithful superset.
 """
 
 from __future__ import annotations

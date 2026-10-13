@@ -50,3 +50,9 @@ advanced:
                                   # => full-record mean, which reproduces the
                                   # published uncertainty band best (DCC/CPS
                                   # real-ensemble test). Uncomment to override.
+
+# ---- seasonality: true keeps only records whose seasonalityGeneral is annual,
+#      summerOnly or winterOnly (Kaufman et al. 2020). Those labels are only
+#      used consistently in Temp12k, so it is off by default; set true to
+#      reproduce the paper from the Temp12k compilation.
+presto_season_filter: false
