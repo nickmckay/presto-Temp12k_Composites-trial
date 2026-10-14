@@ -167,7 +167,7 @@ jobs:
   reconstruct:
     needs: prepare-data
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 360  # hosted-runner maximum; CPS on large pools runs 3-4 h
     strategy:
       fail-fast: false
       matrix:
