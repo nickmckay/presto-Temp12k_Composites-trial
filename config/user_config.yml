@@ -46,6 +46,8 @@ advanced:
   cps_scale_window: [0, 1000]     # CPS scaling window (yr BP; last millennium)
   gam_spline_k:     25            # GAM penalized B-spline basis dimension
   paico_reg_param:  1.0           # PaiCo regularization parameter
+  # max_failed_frac: 0.01        # stop if more than this share of ensemble
+                                  # members fail (SCC/DCC/CPS/PaiCo); default 1%
   # member_ref_bp: [3000, 5000]   # per-member centering window (yr BP). Omitted
                                   # => full-record mean, which reproduces the
                                   # published uncertainty band best (DCC/CPS

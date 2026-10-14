@@ -216,6 +216,7 @@ run_paico <- function(fts, bandIdx, binvec, binAges, nens,
     cols <- lapply(seq_len(nens), one_member)
   }
   nb <- length(binAges)
+  if (exists("check_members")) check_members(cols, nb, "paico", cfg)
   cols <- lapply(cols, function(m)
     if (is.matrix(m) && all(dim(m) == c(nb, N_BANDS))) m else matrix(NA_real_, nb, N_BANDS))
   rs <- cfg$ref_start %||% 1800; re <- cfg$ref_end %||% 1900

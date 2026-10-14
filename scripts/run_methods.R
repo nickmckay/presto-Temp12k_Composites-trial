@@ -212,6 +212,27 @@ apply_reference <- function(ens, binAges, ref_start_ce = 1800, ref_end_ce = 1900
 
 # ---------------------------------------------------------------------------
 # Run one method across nens members; returns global ensemble (nbins x nens).
+# Members that failed (an error, a forked worker killed for memory, or an
+# all-NA result) come back as NA columns. Stop when more than max_failed_frac
+# of them (advanced.max_failed_frac, default 1%) failed, so a run that lost
+# most of its ensemble cannot pass as a result.
+check_members <- function(cols, nb, method, cfg) {
+  good <- vapply(cols, function(m) is.matrix(m) && all(dim(m) == c(nb, N_BANDS)) &&
+                   any(is.finite(m)), logical(1))
+  nfail <- sum(!good)
+  if (nfail > 0) {
+    err <- Filter(function(m) inherits(m, "try-error"), cols)
+    why <- if (length(err)) trimws(as.character(err[[1]])) else
+      "no result (worker killed, possibly out of memory) or all NA"
+    cat(sprintf("[run_methods] %s: %d of %d members failed; first: %s\n",
+                method, nfail, length(cols), why))
+    if (nfail > floor((cfg$max_failed_frac %||% 0.01) * length(cols)))
+      stop(sprintf("%s: %d of %d ensemble members failed (limit %.0f%%)", method, nfail,
+                   length(cols), 100 * (cfg$max_failed_frac %||% 0.01)), call. = FALSE)
+  }
+  invisible(nfail)
+}
+
 # ---------------------------------------------------------------------------
 run_method <- function(method, fts, bandIdx, gridIdx, binvec, binAges, nens,
                        cps_targets = NULL, cfg = list()) {
@@ -278,6 +299,7 @@ run_method <- function(method, fts, bandIdx, gridIdx, binvec, binAges, nens,
     cols <- lapply(seq_len(nens), one_member)
   }
   nb <- length(binAges)
+  check_members(cols, nb, method, cfg)
   cols <- lapply(cols, function(m)
     if (is.matrix(m) && all(dim(m) == c(nb, N_BANDS))) m else matrix(NA_real_, nb, N_BANDS))
 
@@ -436,6 +458,7 @@ main <- function() {
     # per-member centering window in yr BP; NULL/absent = full-record mean
     # (empirically best vs published bands; see apply_reference doc)
     member_ref_bp = cfg$advanced$member_ref_bp,
+    max_failed_frac = cfg$advanced$max_failed_frac,
     ref_start = refp$start, ref_end = refp$end)
 
   # write <m>_global.csv (binAges + ens) and <m>_bands.csv (binAges, band, ens)
